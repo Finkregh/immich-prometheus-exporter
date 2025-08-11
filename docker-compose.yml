@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  immich-exporter:
+    build: .
+    container_name: immich-prometheus-exporter
+    environment:
+      - IMMICH_URL=http://immich-server:2283  # Adjust to your Immich server URL
+      - IMMICH_API_KEY=your-api-key-here      # Replace with your actual API key
+      - IMMICH_INTERVAL=60                    # Export interval in seconds
+    restart: unless-stopped
+    # Uncomment the following lines if you want to save metrics to a file
+    # volumes:
+    #   - ./metrics:/app/metrics
+    # command: ["python3", "immich-prometheus-exporter.py", "export", "--url", "${IMMICH_URL}", "--api-key", "${IMMICH_API_KEY}", "--output", "/app/metrics/immich_metrics.txt", "--interval", "${IMMICH_INTERVAL}"]
+    
+    # Optional: Add to same network as your Immich instance
+    # networks:
+    #   - immich-network
+
+# Uncomment if you need to create a custom network
+# networks:
+#   immich-network:
+#     external: true
