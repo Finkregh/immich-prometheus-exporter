@@ -13,25 +13,14 @@ import pytest
 import responses
 from typer.testing import CliRunner
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 
-# Import from the main script file (with hyphens in filename)
-import importlib.util
-
-spec = importlib.util.spec_from_file_location(
-    "immich_prometheus_exporter",
-    os.path.join(os.path.dirname(__file__), "..", "immich-prometheus-exporter.py"),
-)
-if spec is None or spec.loader is None:
-    raise ImportError("Could not load immich-prometheus-exporter.py")
-
-immich_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(immich_module)
+import immich_prometheus_exporter.main as immich_prometheus_exporter
 
 # Import the classes and app from the loaded module
-ImmichAPI = immich_module.ImmichAPI
-PrometheusExporter = immich_module.PrometheusExporter
-app = immich_module.app
+ImmichAPI = immich_prometheus_exporter.ImmichAPI
+PrometheusExporter = immich_prometheus_exporter.PrometheusExporter
+app = immich_prometheus_exporter.app
 
 
 class TestImmichAPI:
