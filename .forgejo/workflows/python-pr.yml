@@ -24,8 +24,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - name: uv lock
-        run: uv lock && cat uv.lock
+      - name: Cache state
+        if: steps.setup-uv.outputs.cache-hit == 'true'
+        run: echo "Cache was restored"
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev

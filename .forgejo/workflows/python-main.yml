@@ -17,10 +17,14 @@ jobs:
         name: Release with cocogitto
 
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v6
+        uses: https://github.com/astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
           enable-cache: true
+
+      - name: Cache state
+        if: steps.setup-uv.outputs.cache-hit == 'true'
+        run: echo "Cache was restored"
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
