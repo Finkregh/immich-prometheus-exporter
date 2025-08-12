@@ -44,5 +44,3 @@ jobs:
           uv sync --locked --all-extras --dev
           uv run immich-prometheus-exporter --help
 
-      - name: Minimize uv cache
-        run: uv cache prune --ci
