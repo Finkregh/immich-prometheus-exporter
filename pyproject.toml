@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.9"]
+build-backend = "uv_build"
 
 [project]
 name = "immich-prometheus-exporter"
@@ -40,14 +40,23 @@ Homepage = "https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter"
 Repository = "https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter"
 Issues = "https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/issues"
 
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "mypy>=1.17.1",
+    "pytest>=8.4.1",
+    "responses>=0.25.8",
+    "typing-extensions>=4.14.1",
+]
+
 [project.scripts]
 immich-prometheus-exporter = "immich_prometheus_exporter:app"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/immich_prometheus_exporter"]
+#[tool.hatch.build.targets.wheel]
+#packages = ["src/immich_prometheus_exporter"]
 
-[tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/README.md", "/pyproject.toml"]
+#[tool.hatch.build.targets.sdist]
+#include = ["/src", "/tests", "/README.md", "/pyproject.toml"]
 
 [tool.black]
 line-length = 88

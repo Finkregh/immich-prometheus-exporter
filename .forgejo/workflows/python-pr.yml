@@ -1,0 +1,47 @@
+on:
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    name: Unittests and try build -- Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: https://github.com/astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: uv lock
+        run: uv lock && cat uv.lock
+
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
+
+      - name: Run tests
+        env:
+          TERM: "dumb"
+        run: uv run pytest --color=yes tests
+
+      - name: Build
+        run: uv build
+
+      - name: install and run the project
+        run: |
+          uv sync --locked --all-extras --dev
+          uv run immich-prometheus-exporter --help
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
