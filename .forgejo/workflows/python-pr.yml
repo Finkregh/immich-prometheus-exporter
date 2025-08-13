@@ -21,7 +21,7 @@ jobs:
       - name: show tmpdir
         run: |
           echo "cache dir ${RUNNER_TEMP}"
-          ls -la ${RUNNER_TEMP}/*
+          ls -la ${RUNNER_TEMP}/* || ls -la ${RUNNER_TEMP}
 
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
@@ -38,7 +38,7 @@ jobs:
       - name: show tmpdir
         run: |
           echo "cache dir ${RUNNER_TEMP}"
-          ls -la ${RUNNER_TEMP}/*
+          ls -la ${RUNNER_TEMP}/* || ls -la ${RUNNER_TEMP}
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
