@@ -48,7 +48,8 @@ jobs:
           UV_PUBLISH_USERNAME: finkregh
           UV_PUBLISH_PASSWORD: ${{ secrets.PACKAGE_UPLOAD_TOKEN }}
           #UV_PUBLISH_INDEX: ${{ github.server_url }}/api/packages/finkregh/pypi
-          UV_PUBLISH_URL: ${{ github.server_url }}/api/packages/finkregh/pypi/simple
+          UV_PUBLISH_URL: ${{ github.server_url }}/api/packages/finkregh/pypi
         run: |
           echo $UV_PUBLISH_INDEX
-          uv publish -v
+          echo $UV_PUBLISH_URL
+          RUST_LOG=trace uv publish -vvv
