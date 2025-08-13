@@ -27,6 +27,7 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
+          prune-cache: false
 
       - name: Cache state
         if: steps.setup-uv.outputs.cache-hit == 'true'
@@ -52,4 +53,4 @@ jobs:
         run: |
           echo $UV_PUBLISH_INDEX
           echo $UV_PUBLISH_URL
-          RUST_LOG=trace uv publish -vvv
+          uv publish
