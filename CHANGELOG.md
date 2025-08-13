@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [1.0.4](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/3b519a6b43176b7f5bf3d0e7b1afe846e8a14eb6..1.0.4) - 2025-08-13
+#### Miscellaneous Chores
+- add .gitignore - ([3b519a6](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/3b519a6b43176b7f5bf3d0e7b1afe846e8a14eb6)) - Oluf Lorenzen
+
+- - -
+
 ## [1.0.3](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/30e98ba3c1ccf09800a849faa669b1992f55b828..1.0.3) - 2025-08-13
 #### Continuous Integration
 - **(cog)** create forgejo release post-release - ([30e98ba](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/30e98ba3c1ccf09800a849faa669b1992f55b828)) - finkregh
