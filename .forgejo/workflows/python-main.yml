@@ -45,8 +45,10 @@ jobs:
 
       - name: Publish
         env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PACKAGE_UPLOAD_TOKEN }}
+          UV_PUBLISH_USERNAME: finkregh
+          UV_PUBLISH_PASSWORD: ${{ secrets.PACKAGE_UPLOAD_TOKEN }}
           UV_PUBLISH_INDEX: ${{ github.server_url }}/api/packages/finkregh/pypi
+          UV_PUBLISH_URL: ${{ github.server_url }}/api/packages/finkregh/pypi/simple
         run: |
           echo $UV_PUBLISH_INDEX
-          uv publish
+          uv publish -v
