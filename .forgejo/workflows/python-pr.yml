@@ -16,7 +16,7 @@ jobs:
       UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
-      - uses: cschleiden/actions-linter@v1
+      - uses: github.com/cschleiden/actions-linter@v1
         with:
           workflows: '[".forgejo/workflows/*.ya?ml"]'
 
