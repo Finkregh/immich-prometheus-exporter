@@ -2,6 +2,10 @@ branch_whitelist = ["main"]
 
 ignore_merge_commits = true
 
+pre_bump_hooks = [
+    "uv version {{version}}"
+]
+
 # A list of command to run AFTER creating a version
 post_bump_hooks = [
     "git push",
