@@ -27,3 +27,4 @@ template = "remote"
 remote = "https://git.h.oluflorenzen.de"
 repository = "immich-prometheus-exporter"
 owner = "finkregh"
+
