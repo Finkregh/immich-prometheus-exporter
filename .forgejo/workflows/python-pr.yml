@@ -17,12 +17,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: show tmpdir
-        run: |
-          echo "cache dir ${RUNNER_TEMP}"
-          ls -la ${RUNNER_TEMP}/* || ls -la ${RUNNER_TEMP}
-
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
@@ -34,11 +28,6 @@ jobs:
       - name: Cache state
         if: steps.setup-uv.outputs.cache-hit == 'true'
         run: echo "Cache was restored"
-
-      - name: show tmpdir
-        run: |
-          echo "cache dir ${RUNNER_TEMP}"
-          ls -la ${RUNNER_TEMP}/* || ls -la ${RUNNER_TEMP}
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
@@ -53,14 +42,5 @@ jobs:
 
       - name: install and run the project
         run: |
-          echo "cache dir ${RUNNER_TEMP}"
-          ls -la ${RUNNER_TEMP}/*
           uv sync --locked --all-extras --dev
           uv run immich-prometheus-exporter --help
-
-
-#    - name: Save uv cache
-#      uses: actions/cache/save@v4.2.4
-#      with:
-#        path: ${{ env.}}
-#        key: setup-uv-${{ hashFiles('**/*requirements*.txt','**/*requirements*.in',**/*constraints*.txt','**/*constraints*.in','**/pyproject.toml','**/uv.lock') }}
