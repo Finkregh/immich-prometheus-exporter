@@ -1,0 +1,17 @@
+branch_whitelist = ["main"]
+
+ignore_merge_commits = true
+
+# A list of command to run AFTER creating a version
+post_bump_hooks = [
+    "git push",
+    "git push origin {{version}}"
+]
+
+# Changelog configuration
+[changelog]
+path = "CHANGELOG.md"
+template = "remote"
+remote = "https://git.h.oluflorenzen.de"
+repository = "immich-prometheus-exporter"
+owner = "finkregh"
