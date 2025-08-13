@@ -12,6 +12,13 @@ post_bump_hooks = [
     "git push origin {{version}}"
 ]
 
+[commit_types]
+chore = { bump_patch = true }
+revert = { bump_minor = true }
+docs = { bump_patch = true }
+style = { bump_patch = true }
+perf = { bump_patch = true }
+
 # Changelog configuration
 [changelog]
 path = "CHANGELOG.md"
