@@ -17,12 +17,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
+        id: setup-uv
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          prune-cache: false
 
       - name: Cache state
         if: steps.setup-uv.outputs.cache-hit == 'true'
@@ -43,4 +44,3 @@ jobs:
         run: |
           uv sync --locked --all-extras --dev
           uv run immich-prometheus-exporter --help
-
