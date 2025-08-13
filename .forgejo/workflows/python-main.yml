@@ -47,4 +47,6 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PACKAGE_UPLOAD_TOKEN }}
           UV_PUBLISH_INDEX: ${{ env.FORGEJO_API_URL }}/packages/finkregh/pypi
-        run: uv publish
+        run: |
+          echo $UV_PUBLISH_INDEX
+          uv publish
