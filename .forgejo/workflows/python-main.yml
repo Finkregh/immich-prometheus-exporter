@@ -4,7 +4,7 @@ on:
       - main
 jobs:
   build:
-    name: Build and publish
+    name: Bump version, build and publish
     runs-on: ubuntu-latest
 
     steps:
@@ -22,9 +22,9 @@ jobs:
       - name: Configure Git User
         uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/configure-git-user@main
 
-      - uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/release-with-cog@main
-        name: Release with cocogitto
-
+      - name: Release with cocogitto
+        uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/release-with-cog@main
+        
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
