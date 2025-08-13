@@ -13,6 +13,9 @@ jobs:
           fetch-depth: 10
           fetch-tags: true
 
+      - uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/install-yq@main
+        name: Install yq
+
       - uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/install-cocogitto@main
         name: Install cocogitto
 
