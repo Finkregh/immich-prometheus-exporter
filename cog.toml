@@ -9,7 +9,8 @@ pre_bump_hooks = [
 # A list of command to run AFTER creating a version
 post_bump_hooks = [
     "git push",
-    "git push origin {{version}}"
+    "git push origin {{version}}",
+    "forgejo-curl.sh --verbose api_json --data-raw '{"tag_name":"{{version}}"}' ${FORGEJO_SERVER_URL}/api/v1/repos/${FORGEJO_REPOSITORY}/releases"
 ]
 
 [commit_types]
