@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [1.0.3](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/30e98ba3c1ccf09800a849faa669b1992f55b828..1.0.3) - 2025-08-13
+#### Continuous Integration
+- **(cog)** create forgejo release post-release - ([30e98ba](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/30e98ba3c1ccf09800a849faa669b1992f55b828)) - finkregh
+- bump - ([666cb86](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/666cb86c08777dea50bb8cfb81c67da5a7c62581)) - finkregh
+- split - ([d166212](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/d166212fd98554c6e0186913df3f91a3ee4dfe8c)) - finkregh
+- fix path - ([f341d6b](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/f341d6bb7030735f3bb666345472fea6ca6b426e)) - finkregh
+- lint workflow - ([656fba6](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/656fba64d607f1697217bbcfda4aef07391bab5e)) - finkregh
+#### Miscellaneous Chores
+- bump - ([8198db8](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/8198db84f041582ff2605dc8613783d48ede76be)) - finkregh
+
+- - -
+
 ## [1.0.2](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/c985934f2ba6a0d1f518adb3dfba9d0688a227a2..1.0.2) - 2025-08-13
 #### Continuous Integration
 - install uv first to be used by cog - ([97c95ae](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/97c95aef63c4f901f807a04b790bb44003460055)) - finkregh
