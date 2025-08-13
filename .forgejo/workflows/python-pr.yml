@@ -9,7 +9,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: github.com/cschleiden/actions-linter@v1
+      - uses: https://github.com/cschleiden/actions-linter@v1
         with:
           workflows: '[".forgejo/workflows/*.ya?ml"]'
 
