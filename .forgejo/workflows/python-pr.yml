@@ -16,7 +16,12 @@ jobs:
       UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
+      - uses: cschleiden/actions-linter@v1
+        with:
+          workflows: '[".forgejo/workflows/*.ya?ml"]'
+
       - uses: actions/checkout@v4
+
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
