@@ -12,6 +12,14 @@ jobs:
         with:
           fetch-depth: 10
           fetch-tags: true
+        
+      - name: Install uv and set the python version
+        uses: https://github.com/astral-sh/setup-uv@v6
+        id: setup-uv
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: false
 
       - uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/install-yq@main
         name: Install yq
@@ -24,14 +32,6 @@ jobs:
 
       - name: Release with cocogitto
         uses: https://git.h.oluflorenzen.de/mirrors/codeberg.PurpleBooth.common-pipelines/actions/release-with-cog@main
-        
-      - name: Install uv and set the python version
-        uses: https://github.com/astral-sh/setup-uv@v6
-        id: setup-uv
-        with:
-          python-version: "3.13"
-          enable-cache: true
-          prune-cache: false
 
       - name: Cache state
         if: steps.setup-uv.outputs.cache-hit == 'true'
