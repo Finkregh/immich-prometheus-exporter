@@ -27,6 +27,7 @@ jobs:
 
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
+        id: setup-uv
         with:
           python-version: "3.13"
           enable-cache: true
@@ -54,6 +55,4 @@ jobs:
           #UV_PUBLISH_INDEX: ${{ github.server_url }}/api/packages/finkregh/pypi
           UV_PUBLISH_URL: ${{ github.server_url }}/api/packages/finkregh/pypi
         run: |
-          echo $UV_PUBLISH_INDEX
-          echo $UV_PUBLISH_URL
-          uv publish
+          uv publish -v
