@@ -23,6 +23,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          prune-cache: false
 
       - name: Cache state
         if: steps.setup-uv.outputs.cache-hit == 'true'
