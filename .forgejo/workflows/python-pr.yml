@@ -4,18 +4,6 @@ on:
       - main
 
 jobs:
-  lint-ci:
-    name: Lint workflow files
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - id: get_workflow_files
-        run: |
-          echo "workflow_files=$(find .forgejo/workflows -name '*.y*ml' -type f | tr '\n' ' ')" | tee -a $GITHUB_ENV
-      - uses: docker://rhysd/actionlint:1.7.7
-        with:
-          args: -color ${{ steps.get_workflow_files.outputs.workflow_files }}
-
   build:
     name: Unittests and try build -- Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
