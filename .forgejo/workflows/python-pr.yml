@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check workflow files
-        run: ./actionlint -color .forgejo/workflows/*.y*ml
+        run: actionlint -color .forgejo/workflows/*.y*ml
         shell: bash
 
   build:
