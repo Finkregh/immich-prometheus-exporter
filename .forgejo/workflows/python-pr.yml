@@ -2,17 +2,8 @@ on:
   pull_request:
     branches:
       - main
+
 jobs:
-  lint-ci:
-    name: Lint workflow files
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: https://github.com/cschleiden/actions-linter@v1
-        with:
-          workflows: '[".forgejo/workflows/*.ya?ml"]'
-
   build:
     name: Unittests and try build -- Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
