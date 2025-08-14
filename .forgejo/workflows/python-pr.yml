@@ -9,9 +9,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: https://github.com/cschleiden/actions-linter@v1
-        with:
-          workflows: '[".forgejo/workflows/*.ya?ml"]'
+      - name: Check workflow files
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+        shell: bash
 
   build:
     name: Unittests and try build -- Python ${{ matrix.python-version }}
