@@ -2,17 +2,16 @@ on:
   pull_request:
     branches:
       - main
+
 jobs:
   lint-ci:
     name: Lint workflow files
     runs-on: ubuntu-latest
-
+    image: rhysd/actionlint:1.7.7
     steps:
       - uses: actions/checkout@v4
       - name: Check workflow files
-        run: |
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          ./actionlint -color
+        run: ./actionlint -color .forgejo/workflows/*.y*ml
         shell: bash
 
   build:
