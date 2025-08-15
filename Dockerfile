@@ -9,7 +9,8 @@ COPY src/ src/
 COPY README.md .
 
 # Install the package in editable mode
-RUN pip install --no-cache-dir -e .
+RUN --mount=type=cache,mode=777,id=pip_cache,target=/var/cache/pip \
+    pip install --cache-dir=/var/cache/pip -e .
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
