@@ -77,6 +77,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: install helper-script
+        run: |
+          curl --fail -sS -o /usr/local/bin/forgejo-curl.sh "https://git.h.oluflorenzen.de/mirrors/forgejo-curl/raw/branch/main/forgejo-curl.sh" && chmod +x /usr/local/bin/forgejo-curl.sh
+          export PATH=/usr/local/bin:$PATH
+          forgejo-curl.sh --token "${{ env.FORGEJO_TOKEN }}" login ${{ env.FORGEJO_SERVER_URL }}
+          forgejo-curl.sh api_json ${{ env.FORGEJO_SERVER_URL }}/api/v1/user
+
+      - name: Cleanup old dev-version
+        run: |
+            forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypy/${{ github.repository_name }}/${{ needs.determine_versions.outputs.new_dev }} && \
+                forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypy/${{ github.repository_name }}/${{ needs.determine_versions.outputs.new_dev }} --method DELETE
+
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
