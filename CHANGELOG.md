@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [1.1.0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/d35c9e8d9cb662cc8afae7ec547d97d2de4dc59e..1.1.0) - 2025-08-15
+#### Continuous Integration
+- **(container)** use pip cache - ([e1c5c96](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/e1c5c96996fb2da9e5a16a575011011bb722d104)) - Oluf Lorenzen
+- disable workflow lint - ([3dce7e1](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/3dce7e104f4573c7bb3821ca3b8edc1a5d925a3d)) - finkregh
+- other workflow linter - ([d35c9e8](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/d35c9e8d9cb662cc8afae7ec547d97d2de4dc59e)) - finkregh
+#### Features
+- container image - ([10e1743](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/10e174317b13eefc996760c988a5fb267b901eb3)) - finkregh
+
+- - -
+
 ## [1.0.4](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/3b519a6b43176b7f5bf3d0e7b1afe846e8a14eb6..1.0.4) - 2025-08-13
 #### Miscellaneous Chores
 - add .gitignore - ([3b519a6](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/3b519a6b43176b7f5bf3d0e7b1afe846e8a14eb6)) - Oluf Lorenzen
