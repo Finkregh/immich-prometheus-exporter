@@ -7,7 +7,6 @@ It collects data about users, libraries, albums, and storage usage.
 
 import json
 import logging
-import sys
 import time
 from typing import Any
 

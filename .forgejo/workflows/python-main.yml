@@ -19,7 +19,7 @@ jobs:
           export PATH=/usr/local/bin:$PATH
           forgejo-curl.sh --token "${{ env.FORGEJO_TOKEN }}" login ${{ env.FORGEJO_SERVER_URL }}
           forgejo-curl.sh api_json ${{ env.FORGEJO_SERVER_URL }}/api/v1/user
-      
+
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
