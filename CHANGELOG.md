@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [1.1.1](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/f8cacda3aae903a43f3acda69f2967874263a5fc..1.1.1) - 2025-08-15
+#### Bug Fixes
+- ci - ([f8cacda](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/f8cacda3aae903a43f3acda69f2967874263a5fc)) - Oluf Lorenzen
+
+- - -
+
 ## [1.1.0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/d35c9e8d9cb662cc8afae7ec547d97d2de4dc59e..1.1.0) - 2025-08-15
 #### Continuous Integration
 - **(container)** use pip cache - ([e1c5c96](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/e1c5c96996fb2da9e5a16a575011011bb722d104)) - Oluf Lorenzen
