@@ -2,21 +2,48 @@ version: '3.8'
 
 services:
   immich-exporter:
-    build: .
+    image: git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter:1.1.1
     container_name: immich-prometheus-exporter
     environment:
-      - IMMICH_URL=http://immich-server:2283  # Adjust to your Immich server URL
-      - IMMICH_API_KEY=your-api-key-here      # Replace with your actual API key
-      - IMMICH_INTERVAL=60                    # Export interval in seconds
+      # Export command environment variables
+      - IMMICHEXPORTER_EXPORT_URL=http://immich-server:2283  # Adjust to your Immich server URL
+      - IMMICHEXPORTER_EXPORT_API_KEY=your-api-key-here      # Replace with your actual API key
+      - IMMICHEXPORTER_EXPORT_INTERVAL=60                    # Export interval in seconds
+      - IMMICHEXPORTER_EXPORT_LOG_LEVEL=INFO                 # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+      # Uncomment to save metrics to a file instead of stdout
+      # - IMMICHEXPORTER_EXPORT_OUTPUT=/app/metrics/immich_metrics.txt
+      # Uncomment to log to a file
+      # - IMMICHEXPORTER_EXPORT_LOG_FILE=/app/logs/exporter.log
     restart: unless-stopped
     # Uncomment the following lines if you want to save metrics to a file
     # volumes:
     #   - ./metrics:/app/metrics
-    # command: ["python3", "immich-prometheus-exporter.py", "export", "--url", "${IMMICH_URL}", "--api-key", "${IMMICH_API_KEY}", "--output", "/app/metrics/immich_metrics.txt", "--interval", "${IMMICH_INTERVAL}"]
+    #   - ./logs:/app/logs
     
     # Optional: Add to same network as your Immich instance
     # networks:
     #   - immich-network
+
+  # Alternative: HTTP server mode for Prometheus scraping
+  # immich-exporter-server:
+  #   image: git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter:1.1.1
+  #   container_name: immich-prometheus-exporter-server
+  #   environment:
+  #     # Serve command environment variables
+  #     - IMMICHEXPORTER_SERVE_URL=http://immich-server:2283  # Adjust to your Immich server URL
+  #     - IMMICHEXPORTER_SERVE_API_KEY=your-api-key-here      # Replace with your actual API key
+  #     - IMMICHEXPORTER_SERVE_PORT=8000                      # Port to serve metrics on
+  #     - IMMICHEXPORTER_SERVE_LOG_LEVEL=INFO                 # Logging level
+  #     # Uncomment to log to a file
+  #     # - IMMICHEXPORTER_SERVE_LOG_FILE=/app/logs/exporter.log
+  #   ports:
+  #     - "8000:8000"  # Expose metrics endpoint
+  #   restart: unless-stopped
+  #   command: ["python3", "-m", "immich_prometheus_exporter.main", "serve"]
+  #   # volumes:
+  #   #   - ./logs:/app/logs
+  #   # networks:
+  #   #   - immich-network
 
 # Uncomment if you need to create a custom network
 # networks:

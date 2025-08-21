@@ -8,15 +8,20 @@ It collects data about users, libraries, albums, and storage usage.
 import json
 import logging
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import requests
 import typer
+from prometheus_client import REGISTRY, Info, start_http_server
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+from prometheus_client.registry import Collector
 from rich.console import Console
 from rich.logging import RichHandler
 
 app = typer.Typer(
     help="Immich Prometheus Exporter - Export Immich statistics as Prometheus metrics",
+    context_settings={"auto_envvar_prefix": "IMMICHEXPORTER"},
 )
 
 # Global logger - will be configured in setup_logging()
@@ -26,10 +31,11 @@ log = logging.getLogger(__name__)
 def setup_logging(
     level: str = "INFO",
     log_file: str | None = None,
+    *,
     use_stderr: bool = True,
 ) -> None:
     """Setup logging configuration.
-    
+
     :param level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     :type level: str
     :param log_file: Optional log file path
@@ -40,17 +46,17 @@ def setup_logging(
     # Clear any existing handlers
     for handler in log.handlers[:]:
         log.removeHandler(handler)
-    
+
     # Set logging level
     numeric_level = getattr(logging, level.upper(), logging.INFO)
     log.setLevel(numeric_level)
-    
+
     # Create formatter
     formatter = logging.Formatter(
         fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
-    
+
     # Add file handler if specified
     if log_file:
         file_handler = logging.FileHandler(log_file)
@@ -62,13 +68,14 @@ def setup_logging(
         console_handler = RichHandler(
             console=console,
             show_time=True,
-            show_path=False
+            show_path=False,
         )
         console_handler.setFormatter(logging.Formatter("%(message)s"))
         log.addHandler(console_handler)
 
+
 class ImmichAPI:
-    """Client for interacting with Immich API"""
+    """Client for interacting with Immich API."""
 
     def __init__(self, base_url: str, api_key: str) -> None:
         """Initialize the Immich API client.
@@ -106,7 +113,7 @@ class ImmichAPI:
         :raises json.JSONDecodeError: If the response is not valid JSON.
         """
         url = f"{self.base_url}/api/{endpoint.lstrip('/')}"
-        
+
         # Debug logging for API requests
         log.debug(f"Making {method} request to: {url}")
         if data:
@@ -195,8 +202,279 @@ class ImmichAPI:
         return result if isinstance(result, dict) else {}
 
 
+class ImmichCollector(Collector):
+    """Custom Prometheus collector for Immich metrics"""
+
+    def __init__(self, api: ImmichAPI) -> None:
+        """Initialize the Immich collector.
+
+        :param api: The Immich API client instance.
+        :type api: ImmichAPI
+        """
+        self.api = api
+
+    def collect(self) -> Iterator[GaugeMetricFamily | CounterMetricFamily]:
+        """Collect metrics from Immich API and yield metric families.
+
+        :return: Iterator of metric families.
+        :rtype: Iterator[GaugeMetricFamily | CounterMetricFamily]
+        """
+        # Yield timestamp metric
+        timestamp = int(time.time() * 1000)
+        timestamp_metric = GaugeMetricFamily(
+            "immich_exporter_last_scrape_timestamp_ms",
+            "Timestamp of last successful scrape",
+        )
+        timestamp_metric.add_metric([], timestamp)
+        yield timestamp_metric
+
+        # Collect user metrics
+        yield from self._collect_user_metrics()
+
+        # Collect album metrics
+        yield from self._collect_album_metrics()
+
+        # Collect library metrics
+        yield from self._collect_library_metrics()
+
+        # Collect storage metrics
+        yield from self._collect_storage_metrics()
+
+    def _collect_user_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect metrics for all users.
+
+        :return: Iterator of user metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            users = self.api.get_all_users()
+            log.info(f"Found {len(users)} users")
+
+            # Create metric families
+            total_assets_metric = GaugeMetricFamily(
+                "immich_user_total_assets",
+                "Total number of assets for user",
+                labels=["user_id", "user_name", "user_email"],
+            )
+            images_metric = GaugeMetricFamily(
+                "immich_user_images_count",
+                "Number of images for user",
+                labels=["user_id", "user_name", "user_email"],
+            )
+            videos_metric = GaugeMetricFamily(
+                "immich_user_videos_count",
+                "Number of videos for user",
+                labels=["user_id", "user_name", "user_email"],
+            )
+            quota_metric = GaugeMetricFamily(
+                "immich_user_quota_bytes",
+                "User quota in bytes",
+                labels=["user_id", "user_name", "user_email"],
+            )
+            quota_usage_metric = GaugeMetricFamily(
+                "immich_user_quota_usage_bytes",
+                "User quota usage in bytes",
+                labels=["user_id", "user_name", "user_email"],
+            )
+
+            for user in users:
+                user_id = user["id"]
+                user_name = user["name"]
+                user_email = user["email"]
+
+                log.debug(f"Processing user: {user_name} ({user_email})")
+
+                try:
+                    stats = self.api.get_user_statistics(user_id)
+                    labels = [user_id, user_name, user_email]
+
+                    # Add metrics for this user
+                    total_assets_metric.add_metric(labels, stats.get("total", 0))
+                    images_metric.add_metric(labels, stats.get("images", 0))
+                    videos_metric.add_metric(labels, stats.get("videos", 0))
+
+                    # User quota and usage (if available)
+                    if (
+                        "quotaSizeInBytes" in user
+                        and user["quotaSizeInBytes"] is not None
+                    ):
+                        quota_metric.add_metric(labels, user["quotaSizeInBytes"])
+
+                    if (
+                        "quotaUsageInBytes" in user
+                        and user["quotaUsageInBytes"] is not None
+                    ):
+                        quota_usage_metric.add_metric(labels, user["quotaUsageInBytes"])
+
+                    log.debug(f"Successfully collected metrics for user: {user_name}")
+
+                except Exception as e:
+                    log.error(f"Error getting statistics for user {user_name}: {e}")
+                    continue
+
+            # Yield all user metrics
+            yield total_assets_metric
+            yield images_metric
+            yield videos_metric
+            yield quota_metric
+            yield quota_usage_metric
+
+        except Exception as e:
+            log.error(f"Error collecting user metrics: {e}")
+
+    def _collect_album_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect album statistics.
+
+        :return: Iterator of album metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            album_stats = self.api.get_album_statistics()
+            log.debug(f"Album statistics: {album_stats}")
+
+            owned_metric = GaugeMetricFamily(
+                "immich_albums_owned_total",
+                "Total number of albums owned by users",
+            )
+            owned_metric.add_metric([], album_stats.get("owned", 0))
+            yield owned_metric
+
+            shared_metric = GaugeMetricFamily(
+                "immich_albums_shared_total",
+                "Total number of shared albums",
+            )
+            shared_metric.add_metric([], album_stats.get("shared", 0))
+            yield shared_metric
+
+            not_shared_metric = GaugeMetricFamily(
+                "immich_albums_not_shared_total",
+                "Total number of albums not shared",
+            )
+            not_shared_metric.add_metric([], album_stats.get("notShared", 0))
+            yield not_shared_metric
+
+            log.info("Successfully collected album metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting album metrics: {e}")
+
+    def _collect_library_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect metrics for all libraries.
+
+        :return: Iterator of library metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            libraries = self.api.get_all_libraries()
+            log.info(f"Found {len(libraries)} libraries")
+
+            # Create metric families
+            total_assets_metric = GaugeMetricFamily(
+                "immich_library_total_assets",
+                "Total number of assets in library",
+                labels=["library_id", "library_name", "owner_id"],
+            )
+            photos_metric = GaugeMetricFamily(
+                "immich_library_photos_count",
+                "Number of photos in library",
+                labels=["library_id", "library_name", "owner_id"],
+            )
+            videos_metric = GaugeMetricFamily(
+                "immich_library_videos_count",
+                "Number of videos in library",
+                labels=["library_id", "library_name", "owner_id"],
+            )
+            usage_metric = GaugeMetricFamily(
+                "immich_library_usage_bytes",
+                "Library usage in bytes",
+                labels=["library_id", "library_name", "owner_id"],
+            )
+
+            for library in libraries:
+                library_id = library["id"]
+                library_name = library["name"]
+                owner_id = library["ownerId"]
+
+                log.debug(f"Processing library: {library_name} (ID: {library_id})")
+
+                try:
+                    stats = self.api.get_library_statistics(library_id)
+                    labels = [library_id, library_name, owner_id]
+
+                    # Add metrics for this library
+                    total_assets_metric.add_metric(labels, stats.get("total", 0))
+                    photos_metric.add_metric(labels, stats.get("photos", 0))
+                    videos_metric.add_metric(labels, stats.get("videos", 0))
+                    usage_metric.add_metric(labels, stats.get("usage", 0))
+
+                    log.debug(
+                        f"Successfully collected metrics for library: {library_name}",
+                    )
+
+                except Exception as e:
+                    log.error(
+                        f"Error getting statistics for library {library_name}: {e}",
+                    )
+                    continue
+
+            # Yield all library metrics
+            yield total_assets_metric
+            yield photos_metric
+            yield videos_metric
+            yield usage_metric
+
+        except Exception as e:
+            log.error(f"Error collecting library metrics: {e}")
+
+    def _collect_storage_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect storage metrics.
+
+        :return: Iterator of storage metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            storage = self.api.get_storage()
+            log.debug(f"Storage information: {storage}")
+
+            disk_size_metric = GaugeMetricFamily(
+                "immich_storage_disk_size_bytes",
+                "Total disk size in bytes",
+            )
+            disk_size_metric.add_metric([], storage.get("diskSizeRaw", 0))
+            yield disk_size_metric
+
+            disk_use_metric = GaugeMetricFamily(
+                "immich_storage_disk_use_bytes",
+                "Used disk space in bytes",
+            )
+            disk_use_metric.add_metric([], storage.get("diskUseRaw", 0))
+            yield disk_use_metric
+
+            disk_available_metric = GaugeMetricFamily(
+                "immich_storage_disk_available_bytes",
+                "Available disk space in bytes",
+            )
+            disk_available_metric.add_metric([], storage.get("diskAvailableRaw", 0))
+            yield disk_available_metric
+
+            disk_usage_percentage_metric = GaugeMetricFamily(
+                "immich_storage_disk_usage_percentage",
+                "Disk usage percentage",
+            )
+            disk_usage_percentage_metric.add_metric(
+                [],
+                storage.get("diskUsagePercentage", 0),
+            )
+            yield disk_usage_percentage_metric
+
+            log.info("Successfully collected storage metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting storage metrics: {e}")
+
+
 class PrometheusExporter:
-    """Prometheus metrics exporter for Immich"""
+    """Prometheus metrics exporter for Immich (legacy format for export command)"""
 
     def __init__(self, api: ImmichAPI) -> None:
         """Initialize the Prometheus exporter.
@@ -250,7 +528,7 @@ class PrometheusExporter:
                 user_id = user["id"]
                 user_name = user["name"]
                 user_email = user["email"]
-                
+
                 log.debug(f"Processing user: {user_name} ({user_email})")
 
                 try:
@@ -308,7 +586,7 @@ class PrometheusExporter:
                             labels,
                             "User quota usage in bytes",
                         )
-                    
+
                     log.debug(f"Successfully collected metrics for user: {user_name}")
 
                 except Exception as e:
@@ -345,7 +623,7 @@ class PrometheusExporter:
                 album_stats.get("notShared", 0),
                 help_text="Total number of albums not shared",
             )
-            
+
             log.info("Successfully collected album metrics")
 
         except Exception as e:
@@ -365,7 +643,7 @@ class PrometheusExporter:
                 library_id = library["id"]
                 library_name = library["name"]
                 owner_id = library["ownerId"]
-                
+
                 log.debug(f"Processing library: {library_name} (ID: {library_id})")
 
                 try:
@@ -408,11 +686,15 @@ class PrometheusExporter:
                         labels,
                         "Library usage in bytes",
                     )
-                    
-                    log.debug(f"Successfully collected metrics for library: {library_name}")
+
+                    log.debug(
+                        f"Successfully collected metrics for library: {library_name}",
+                    )
 
                 except Exception as e:
-                    log.error(f"Error getting statistics for library {library_name}: {e}")
+                    log.error(
+                        f"Error getting statistics for library {library_name}: {e}",
+                    )
                     continue
 
         except Exception as e:
@@ -451,7 +733,7 @@ class PrometheusExporter:
                 storage.get("diskUsagePercentage", 0),
                 help_text="Disk usage percentage",
             )
-            
+
             log.info("Successfully collected storage metrics")
 
         except Exception as e:
@@ -473,7 +755,7 @@ class PrometheusExporter:
 
         log.info("Collecting storage metrics...")
         self.collect_storage_metrics()
-        
+
         log.info("Metrics collection completed")
 
     def export_metrics(self) -> str:
@@ -483,6 +765,98 @@ class PrometheusExporter:
         :rtype: str
         """
         return "\n".join(self.metrics)
+
+
+@app.command()
+def serve(
+    url: str = typer.Option(
+        ...,
+        "--url",
+        "-u",
+        help="Immich server URL (e.g., http://localhost:2283)",
+    ),
+    api_key: str = typer.Option(..., "--api-key", "-k", help="Immich API key"),
+    port: int = typer.Option(
+        8000,
+        "--port",
+        "-p",
+        help="Port to serve metrics on",
+    ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
+    log_file: str | None = typer.Option(
+        None,
+        "--log-file",
+        help="Log file path (default: stderr)",
+    ),
+) -> None:
+    """Start HTTP server to serve Immich metrics in Prometheus format.
+
+    :param url: The Immich server URL.
+    :type url: str
+    :param api_key: The Immich API key for authentication.
+    :type api_key: str
+    :param port: The port to serve metrics on.
+    :type port: int
+    :param log_level: Logging level.
+    :type log_level: str
+    :param log_file: Optional log file path.
+    :type log_file: str | None
+    :raises typer.Exit: If required parameters are missing or server fails to start.
+    """
+    # Validate inputs
+    if not url:
+        typer.echo("Error: URL is required", err=True)
+        raise typer.Exit(1)
+
+    if not api_key:
+        typer.echo("Error: API key is required", err=True)
+        raise typer.Exit(1)
+
+    # Setup logging
+    setup_logging(level=log_level, log_file=log_file, use_stderr=True)
+
+    log.info("Starting Immich Prometheus Exporter HTTP Server")
+    log.info(f"Immich server URL: {url}")
+    log.info(f"Serving metrics on port: {port}")
+    log.info(f"Log level: {log_level}")
+    if log_file:
+        log.info(f"Logging to file: {log_file}")
+    else:
+        log.info("Logging to stderr")
+
+    try:
+        # Initialize API client and collector
+        api = ImmichAPI(url, api_key)
+        collector = ImmichCollector(api)
+
+        # Register collector
+        REGISTRY.register(collector)
+        log.info("Registered Immich collector")
+
+        # Add exporter info
+        info = Info("immich_exporter", "Immich Prometheus Exporter")
+        info.info({"version": "1.0.0", "immich_url": url})
+
+        # Start HTTP server
+        start_http_server(port)
+        log.info(f"HTTP server started on port {port}")
+        log.info(f"Metrics available at http://localhost:{port}/metrics")
+        log.info("Press Ctrl+C to stop")
+
+        # Keep the server running
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            log.info("Server stopped by user")
+
+    except Exception as e:
+        log.error(f"Error starting server: {e}")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -521,7 +895,7 @@ def export(
         "--log-to-stdout",
         help="Log to stdout instead of stderr (requires --output to be set)",
     ),
-):
+) -> None:
     """Export Immich metrics in Prometheus format.
 
     :param url: The Immich server URL.
@@ -561,7 +935,7 @@ def export(
     # Setup logging
     use_stderr = not log_to_stdout
     setup_logging(level=log_level, log_file=log_file, use_stderr=use_stderr)
-    
+
     log.info("Starting Immich Prometheus Exporter")
     log.info(f"Immich server URL: {url}")
     log.info(f"Log level: {log_level}")
@@ -576,7 +950,7 @@ def export(
     api = ImmichAPI(url, api_key)
     exporter = PrometheusExporter(api)
 
-    def export_once():
+    def export_once() -> bool:
         """Perform a single export operation.
 
         :return: True if export was successful, False otherwise.
@@ -584,7 +958,7 @@ def export(
         """
         try:
             log.debug("Starting metrics export")
-            
+
             # Clear previous metrics
             exporter.metrics = []
 
@@ -644,7 +1018,7 @@ def export(
 def test_connection(
     url: str = typer.Option(..., "--url", "-u", help="Immich server URL"),
     api_key: str = typer.Option(..., "--api-key", "-k", help="Immich API key"),
-):
+) -> None:
     """Test connection to Immich server.
 
     Verifies that the provided URL and API key can successfully connect to the Immich server

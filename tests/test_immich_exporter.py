@@ -20,18 +20,19 @@ import immich_prometheus_exporter.main as immich_prometheus_exporter
 # Import the classes and app from the loaded module
 ImmichAPI = immich_prometheus_exporter.ImmichAPI
 PrometheusExporter = immich_prometheus_exporter.PrometheusExporter
+ImmichCollector = immich_prometheus_exporter.ImmichCollector
 app = immich_prometheus_exporter.app
 
 
 class TestImmichAPI:
     """Test the ImmichAPI class"""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test fixtures"""
         self.api = ImmichAPI("http://localhost:2283", "test-api-key")
 
     @responses.activate
-    def test_get_all_users(self):
+    def test_get_all_users(self) -> None:
         """Test getting all users"""
         mock_users = [
             {
@@ -63,7 +64,7 @@ class TestImmichAPI:
         assert users[1]["name"] == "Jane Smith"
 
     @responses.activate
-    def test_get_user_statistics(self):
+    def test_get_user_statistics(self) -> None:
         """Test getting user statistics"""
         mock_stats = {
             "total": 1250,
@@ -84,7 +85,7 @@ class TestImmichAPI:
         assert stats["videos"] == 250
 
     @responses.activate
-    def test_get_album_statistics(self):
+    def test_get_album_statistics(self) -> None:
         """Test getting album statistics"""
         mock_stats = {
             "owned": 15,
@@ -105,7 +106,7 @@ class TestImmichAPI:
         assert stats["notShared"] == 10
 
     @responses.activate
-    def test_get_all_libraries(self):
+    def test_get_all_libraries(self) -> None:
         """Test getting all libraries"""
         mock_libraries = [
             {
@@ -133,7 +134,7 @@ class TestImmichAPI:
         assert libraries[1]["name"] == "Videos Library"
 
     @responses.activate
-    def test_get_library_statistics(self):
+    def test_get_library_statistics(self) -> None:
         """Test getting library statistics"""
         mock_stats = {
             "total": 5000,
@@ -156,7 +157,7 @@ class TestImmichAPI:
         assert stats["usage"] == 50000000000
 
     @responses.activate
-    def test_get_storage(self):
+    def test_get_storage(self) -> None:
         """Test getting storage information"""
         mock_storage = {
             "diskSizeRaw": 1000000000000,
@@ -181,7 +182,7 @@ class TestImmichAPI:
         assert storage["diskUsagePercentage"] == 60.0
 
     @responses.activate
-    def test_api_error_handling(self):
+    def test_api_error_handling(self) -> None:
         """Test API error handling"""
         responses.add(
             responses.GET,
@@ -194,7 +195,7 @@ class TestImmichAPI:
             self.api.get_all_users()
 
     @responses.activate
-    def test_invalid_json_response(self):
+    def test_invalid_json_response(self) -> None:
         """Test handling of invalid JSON responses"""
         responses.add(
             responses.GET,
@@ -207,7 +208,7 @@ class TestImmichAPI:
             self.api.get_all_users()
 
     @responses.activate
-    def test_non_list_response_for_users(self):
+    def test_non_list_response_for_users(self) -> None:
         """Test handling when users endpoint returns non-list"""
         responses.add(
             responses.GET,
@@ -220,7 +221,7 @@ class TestImmichAPI:
         assert users == []
 
     @responses.activate
-    def test_non_dict_response_for_stats(self):
+    def test_non_dict_response_for_stats(self) -> None:
         """Test handling when stats endpoint returns non-dict"""
         responses.add(
             responses.GET,
@@ -236,12 +237,12 @@ class TestImmichAPI:
 class TestPrometheusExporter:
     """Test the PrometheusExporter class"""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test fixtures"""
         self.api = ImmichAPI("http://localhost:2283", "test-api-key")
         self.exporter = PrometheusExporter(self.api)
 
-    def test_add_metric_without_labels(self):
+    def test_add_metric_without_labels(self) -> None:
         """Test adding a metric without labels"""
         self.exporter._add_metric("test_metric", 42.0, help_text="Test metric")
 
@@ -250,11 +251,14 @@ class TestPrometheusExporter:
         assert "# TYPE test_metric gauge" in metrics
         assert "test_metric 42.0" in metrics
 
-    def test_add_metric_with_labels(self):
+    def test_add_metric_with_labels(self) -> None:
         """Test adding a metric with labels"""
         labels = {"user": "john", "type": "images"}
         self.exporter._add_metric(
-            "test_metric", 100.0, labels, "Test metric with labels"
+            "test_metric",
+            100.0,
+            labels,
+            "Test metric with labels",
         )
 
         metrics = self.exporter.export_metrics()
@@ -263,7 +267,7 @@ class TestPrometheusExporter:
         assert 'test_metric{user="john",type="images"} 100.0' in metrics
 
     @responses.activate
-    def test_collect_user_metrics(self):
+    def test_collect_user_metrics(self) -> None:
         """Test collecting user metrics"""
         # Mock users response
         mock_users = [
@@ -309,7 +313,7 @@ class TestPrometheusExporter:
         assert 'user_email="john@example.com"' in metrics
 
     @responses.activate
-    def test_collect_album_metrics(self):
+    def test_collect_album_metrics(self) -> None:
         """Test collecting album metrics"""
         mock_stats = {
             "owned": 15,
@@ -332,7 +336,7 @@ class TestPrometheusExporter:
         assert "immich_albums_not_shared_total 10" in metrics
 
     @responses.activate
-    def test_collect_library_metrics(self):
+    def test_collect_library_metrics(self) -> None:
         """Test collecting library metrics"""
         # Mock libraries response
         mock_libraries = [
@@ -375,7 +379,7 @@ class TestPrometheusExporter:
         assert 'library_name="Photos Library"' in metrics
 
     @responses.activate
-    def test_collect_storage_metrics(self):
+    def test_collect_storage_metrics(self) -> None:
         """Test collecting storage metrics"""
         mock_storage = {
             "diskSizeRaw": 1000000000000,
@@ -418,6 +422,169 @@ class TestPrometheusExporter:
         assert "immich_user_total_assets" not in metrics
 
 
+class TestImmichCollector:
+    """Test the ImmichCollector class"""
+
+    def setup_method(self):
+        """Set up test fixtures"""
+        self.api = ImmichAPI("http://localhost:2283", "test-api-key")
+        self.collector = ImmichCollector(self.api)
+
+    @responses.activate
+    def test_collect_timestamp_metric(self):
+        """Test that collector generates timestamp metric"""
+        # Mock minimal API responses to avoid errors
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/albums/statistics",
+            json={"owned": 0, "shared": 0, "notShared": 0},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/storage",
+            json={
+                "diskSizeRaw": 0,
+                "diskUseRaw": 0,
+                "diskAvailableRaw": 0,
+                "diskUsagePercentage": 0,
+            },
+            status=200,
+        )
+
+        metrics = list(self.collector.collect())
+
+        # Should have at least the timestamp metric
+        assert len(metrics) > 0
+
+        # First metric should be timestamp
+        timestamp_metric = metrics[0]
+        assert timestamp_metric.name == "immich_exporter_last_scrape_timestamp_ms"
+        assert timestamp_metric.documentation == "Timestamp of last successful scrape"
+
+    @responses.activate
+    def test_collect_user_metrics(self):
+        """Test collecting user metrics via collector"""
+        # Mock users response
+        mock_users = [
+            {
+                "id": "user1",
+                "name": "John Doe",
+                "email": "john@example.com",
+                "quotaSizeInBytes": 1000000000,
+                "quotaUsageInBytes": 500000000,
+            },
+        ]
+
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=mock_users,
+            status=200,
+        )
+
+        # Mock user statistics response
+        mock_stats = {
+            "total": 1250,
+            "images": 1000,
+            "videos": 250,
+        }
+
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users/user1/statistics",
+            json=mock_stats,
+            status=200,
+        )
+
+        # Mock other endpoints to avoid errors
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/albums/statistics",
+            json={"owned": 0, "shared": 0, "notShared": 0},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/storage",
+            json={
+                "diskSizeRaw": 0,
+                "diskUseRaw": 0,
+                "diskAvailableRaw": 0,
+                "diskUsagePercentage": 0,
+            },
+            status=200,
+        )
+
+        metrics = list(self.collector.collect())
+
+        # Find user metrics
+        user_metrics = [m for m in metrics if m.name.startswith("immich_user_")]
+        assert (
+            len(user_metrics) >= 3
+        )  # At least total_assets, images_count, videos_count
+
+        # Check specific metrics exist
+        metric_names = [m.name for m in user_metrics]
+        assert "immich_user_total_assets" in metric_names
+        assert "immich_user_images_count" in metric_names
+        assert "immich_user_videos_count" in metric_names
+
+    @responses.activate
+    def test_collect_error_handling(self):
+        """Test collector error handling"""
+        # Mock failing API calls
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json={"error": "Server error"},
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/albums/statistics",
+            json={"error": "Server error"},
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json={"error": "Server error"},
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/storage",
+            json={"error": "Server error"},
+            status=500,
+        )
+
+        # Should not raise exception, but handle gracefully
+        metrics = list(self.collector.collect())
+
+        # Should still have timestamp metric even if others fail
+        assert len(metrics) >= 1
+        assert metrics[0].name == "immich_exporter_last_scrape_timestamp_ms"
+
+
 class TestCLICommands:
     """Test the CLI commands"""
 
@@ -457,7 +624,7 @@ class TestCLICommands:
         assert result.exit_code != 0
         # Check both stdout and stderr for the error message
         output = result.stdout + result.stderr
-        assert ("Missing option" in output or "required" in output.lower())
+        assert "Missing option" in output or "required" in output.lower()
 
     def test_test_connection_missing_required_args(self):
         """Test test-connection command with missing required arguments"""
@@ -465,14 +632,17 @@ class TestCLICommands:
         assert result.exit_code != 0
         # Check both stdout and stderr for the error message
         output = result.stdout + result.stderr
-        assert ("Missing option" in output or "required" in output.lower())
+        assert "Missing option" in output or "required" in output.lower()
 
     @responses.activate
     def test_successful_export(self):
         """Test successful export command"""
         # Mock all required API endpoints
         responses.add(
-            responses.GET, "http://localhost:2283/api/admin/users", json=[], status=200
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
         )
         responses.add(
             responses.GET,
@@ -481,7 +651,10 @@ class TestCLICommands:
             status=200,
         )
         responses.add(
-            responses.GET, "http://localhost:2283/api/libraries", json=[], status=200
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json=[],
+            status=200,
         )
         responses.add(
             responses.GET,
@@ -571,7 +744,7 @@ class TestCLICommands:
         assert result.exit_code == 1
         # Check both stdout and stderr for the error message
         output = result.stdout + result.stderr
-        assert ("Connection failed" in output or "error" in output.lower())
+        assert "Connection failed" in output or "error" in output.lower()
 
 
 class TestIntegration:
