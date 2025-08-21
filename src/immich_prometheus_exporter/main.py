@@ -484,6 +484,7 @@ class PrometheusExporter:
         """
         self.api: ImmichAPI = api
         self.metrics: list[str] = []
+        self._help_type_added: set[str] = set()
 
     def _add_metric(
         self,
@@ -503,9 +504,11 @@ class PrometheusExporter:
         :param help_text: Optional help text for the metric.
         :type help_text: str
         """
-        if help_text:
+        # Only add HELP and TYPE lines once per metric name
+        if help_text and name not in self._help_type_added:
             self.metrics.append(f"# HELP {name} {help_text}")
             self.metrics.append(f"# TYPE {name} gauge")
+            self._help_type_added.add(name)
 
         label_str = ""
         if labels:
@@ -758,6 +761,15 @@ class PrometheusExporter:
 
         log.info("Metrics collection completed")
 
+    def clear_metrics(self) -> None:
+        """Clear all metrics and reset state.
+        
+        This should be called before collecting new metrics to ensure
+        HELP and TYPE lines are properly managed.
+        """
+        self.metrics = []
+        self._help_type_added = set()
+
     def export_metrics(self) -> str:
         """Export metrics in Prometheus format.
 
@@ -959,8 +971,8 @@ def export(
         try:
             log.debug("Starting metrics export")
 
-            # Clear previous metrics
-            exporter.metrics = []
+            # Clear previous metrics and reset state
+            exporter.clear_metrics()
 
             # Add timestamp
             timestamp = int(time.time() * 1000)
