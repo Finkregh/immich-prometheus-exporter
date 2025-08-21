@@ -84,11 +84,6 @@ jobs:
           forgejo-curl.sh --token "${{ env.FORGEJO_TOKEN }}" login ${{ env.FORGEJO_SERVER_URL }}
           forgejo-curl.sh api_json ${{ env.FORGEJO_SERVER_URL }}/api/v1/user
 
-      - name: Cleanup old dev-version
-        run: |
-            forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypy/${{ github.repository_name }}/${{ needs.determine_versions.outputs.new_dev }} && \
-                forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypy/${{ github.repository_name }}/${{ needs.determine_versions.outputs.new_dev }} --method DELETE
-
       - name: Install uv and set the python version
         uses: https://github.com/astral-sh/setup-uv@v6
         id: setup-uv
@@ -101,8 +96,17 @@ jobs:
         if: steps.setup-uv.outputs.cache-hit == 'true'
         run: echo "Cache was restored"
 
-      - name: Set dev version
-        run: uv version ${{ needs.determine_versions.outputs.new_dev }}
+      - name: Set python package version
+        id: python_pkg_version
+        run: |
+            echo "version=$(uv version --short ${{ needs.determine_versions.outputs.new_dev }})" >> "$GITHUB_OUTPUT"
+            cat "$GITHUB_OUTPUT"
+
+      - name: Cleanup old dev-version
+        run: |
+            if forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypi/${{ github.event.repository.name }}/${{ steps.python_pkg_version.outputs.version }}; then
+                forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypi/${{ github.event.repository.name }}/${{ steps.python_pkg_version.outputs.version }} --method DELETE || true
+            fi
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
@@ -128,7 +132,7 @@ jobs:
           UV_PUBLISH_URL: ${{ github.server_url }}/api/packages/finkregh/pypi
         run: |
           if [[ "${UV_PYTHON}" == "3.13" ]]; then
-            uv publish -v
+            uv publish -v || true
           else
             echo "Skipping publish, see 3.13 run."
           fi
