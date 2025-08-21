@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.1](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/5ccffa84e0405dbb6848d0bca90995ab0ad87e23..2.0.1) - 2025-08-21
+#### Bug Fixes
+- dont emit HELP or TYPE multiple times - ([5ccffa8](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/5ccffa84e0405dbb6848d0bca90995ab0ad87e23)) - Oluf Lorenzen
+
+- - -
+
 ## [2.0.0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/5d000b000ea6505f9b896cfbe047a7d838203e5f..2.0.0) - 2025-08-21
 #### Continuous Integration
 - **(pr)** fix publish problems - ([c9e8add](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/c9e8addf498777c0fec028b58eadb56c82eeabce)) - Oluf Lorenzen
