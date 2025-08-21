@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/5d000b000ea6505f9b896cfbe047a7d838203e5f..2.0.0) - 2025-08-21
+#### Continuous Integration
+- **(pr)** fix publish problems - ([c9e8add](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/c9e8addf498777c0fec028b58eadb56c82eeabce)) - Oluf Lorenzen
+- only do latest python version - ([6216652](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/6216652a6ddf65d15f93e5dba57873f39eeecee6)) - Oluf Lorenzen
+#### Features
+- use prometheus library - ([5d000b0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/5d000b000ea6505f9b896cfbe047a7d838203e5f)) - Oluf Lorenzen
+
+- - -
+
 ## [1.1.1](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/f8cacda3aae903a43f3acda69f2967874263a5fc..1.1.1) - 2025-08-15
 #### Bug Fixes
 - ci - ([f8cacda](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/f8cacda3aae903a43f3acda69f2967874263a5fc)) - Oluf Lorenzen
