@@ -105,7 +105,7 @@ jobs:
       - name: Cleanup old dev-version
         run: |
             if forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypi/${{ github.event.repository.name }}/${{ steps.python_pkg_version.outputs.version }}; then
-                forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypi/${{ github.event.repository.name }}/${{ steps.python_pkg_version.outputs.version }} --method DELETE || true
+                forgejo-curl.sh --verbose api ${FORGEJO_SERVER_URL}/api/v1/packages/${{ github.repository_owner }}/pypi/${{ github.event.repository.name }}/${{ steps.python_pkg_version.outputs.version }} -X DELETE || true
             fi
 
       - name: Install the project
