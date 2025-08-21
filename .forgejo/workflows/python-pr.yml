@@ -146,7 +146,6 @@ jobs:
       image: node:24-bookworm
       options: >-
         --privileged
-        --cgroup-manager=cgroupfs
       env:
         DOCKER_HOST: tcp://docker_dind:2375
 
