@@ -16,10 +16,12 @@ RUN --mount=type=cache,mode=777,id=pip_cache,target=/var/cache/pip \
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
 
-# Set default environment variables
-ENV IMMICH_URL=""
-ENV IMMICH_API_KEY=""
-ENV IMMICH_INTERVAL="60"
+# Set default environment variables for export command
+ENV IMMICHEXPORTER_EXPORT_URL=""
+ENV IMMICHEXPORTER_EXPORT_API_KEY=""
+ENV IMMICHEXPORTER_EXPORT_INTERVAL="60"
+ENV IMMICHEXPORTER_EXPORT_LOG_LEVEL="INFO"
 
 # Default command using the installed console script
-CMD ["immich-prometheus-exporter", "export", "--url", "${IMMICH_URL}", "--api-key", "${IMMICH_API_KEY}", "--interval", "${IMMICH_INTERVAL}"]
+# Environment variables will be automatically picked up by typer
+CMD ["immich-prometheus-exporter", "export"]

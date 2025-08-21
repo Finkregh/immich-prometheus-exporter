@@ -171,13 +171,57 @@ The project includes a Dockerfile that installs the package properly. Build and 
 
 ```bash
 docker build -t immich-exporter .
-docker run -e IMMICH_URL=http://your-immich-server:2283 -e IMMICH_API_KEY=your-api-key immich-exporter
+docker run -e IMMICHEXPORTER_EXPORT_URL=http://your-immich-server:2283 -e IMMICHEXPORTER_EXPORT_API_KEY=your-api-key immich-exporter
 ```
 
 Or use docker-compose:
 
 ```bash
 docker-compose up
+```
+
+### Environment Variables
+
+The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. Each command has its own set of environment variables:
+
+#### Global Options
+- `IMMICHEXPORTER_INSTALL_COMPLETION` - Install completion for the current shell
+- `IMMICHEXPORTER_SHOW_COMPLETION` - Show completion for the current shell
+
+#### Export Command
+- `IMMICHEXPORTER_EXPORT_URL` - Immich server URL (required)
+- `IMMICHEXPORTER_EXPORT_API_KEY` - Immich API key (required)
+- `IMMICHEXPORTER_EXPORT_OUTPUT` - Output file path (optional)
+- `IMMICHEXPORTER_EXPORT_INTERVAL` - Continuous export interval in seconds (optional)
+- `IMMICHEXPORTER_EXPORT_LOG_LEVEL` - Logging level (default: INFO)
+- `IMMICHEXPORTER_EXPORT_LOG_FILE` - Log file path (optional)
+- `IMMICHEXPORTER_EXPORT_LOG_TO_STDOUT` - Log to stdout instead of stderr (optional)
+
+#### Serve Command
+- `IMMICHEXPORTER_SERVE_URL` - Immich server URL (required)
+- `IMMICHEXPORTER_SERVE_API_KEY` - Immich API key (required)
+- `IMMICHEXPORTER_SERVE_PORT` - Port to serve metrics on (default: 8000)
+- `IMMICHEXPORTER_SERVE_LOG_LEVEL` - Logging level (default: INFO)
+- `IMMICHEXPORTER_SERVE_LOG_FILE` - Log file path (optional)
+
+#### Test Connection Command
+- `IMMICHEXPORTER_TEST_CONNECTION_URL` - Immich server URL (required)
+- `IMMICHEXPORTER_TEST_CONNECTION_API_KEY` - Immich API key (required)
+
+#### Example Usage with Environment Variables
+
+```bash
+# Export using environment variables
+export IMMICHEXPORTER_EXPORT_URL=http://localhost:2283
+export IMMICHEXPORTER_EXPORT_API_KEY=your-api-key
+export IMMICHEXPORTER_EXPORT_INTERVAL=60
+immich-prometheus-exporter export
+
+# Serve using environment variables
+export IMMICHEXPORTER_SERVE_URL=http://localhost:2283
+export IMMICHEXPORTER_SERVE_API_KEY=your-api-key
+export IMMICHEXPORTER_SERVE_PORT=8000
+immich-prometheus-exporter serve
 ```
 
 ## Example Output
@@ -234,5 +278,4 @@ The script is built using:
 
 ## License
 
-This project is open source. Feel free to modify and distribute as needed.
-
+MIT, see LICENSE.md
