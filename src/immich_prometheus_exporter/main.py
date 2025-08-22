@@ -776,7 +776,7 @@ class PrometheusExporter:
         :return: String containing all metrics in Prometheus format.
         :rtype: str
         """
-        return "\n".join(self.metrics)
+        return "\n".join(self.metrics) + "\n"
 
 
 @app.command()
