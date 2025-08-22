@@ -763,7 +763,7 @@ class PrometheusExporter:
 
     def clear_metrics(self) -> None:
         """Clear all metrics and reset state.
-        
+
         This should be called before collecting new metrics to ensure
         HELP and TYPE lines are properly managed.
         """
