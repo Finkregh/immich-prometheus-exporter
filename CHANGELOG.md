@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.3](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/782317ef6acd0b4be44388256950c8cc0c1d9153..2.0.3) - 2025-08-22
+#### Style
+- formatting - ([782317e](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/782317ef6acd0b4be44388256950c8cc0c1d9153)) - Oluf Lorenzen
+
+- - -
+
 ## [2.0.2](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/6cf88dee41d9af2614331a111e551d31dd9c7e13..2.0.2) - 2025-08-22
 #### Bug Fixes
 - trailing newline - ([6cf88de](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/6cf88dee41d9af2614331a111e551d31dd9c7e13)) - Oluf Lorenzen
