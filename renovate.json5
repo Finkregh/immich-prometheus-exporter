@@ -1,0 +1,7 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "local>renovate-forgejo/renovate-bot//local-base.json5",
+    "local>renovate-forgejo/renovate-bot//hugo-blogs.json5",
+  ],
+}
