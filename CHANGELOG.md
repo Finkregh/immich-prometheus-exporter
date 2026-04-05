@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.6](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/bb35a6640d07c6dfccd2c737a1b79bb3ababbdee..2.0.6) - 2026-04-05
+#### Miscellaneous Chores
+- (**ci**) bump uv - ([bb35a66](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/bb35a6640d07c6dfccd2c737a1b79bb3ababbdee)) - Oluf Lorenzen
+
+- - -
+
 ## [2.0.5](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/eb833f9ccb3605acf9fc4ecd21e2d9e4deed4f32..2.0.5) - 2026-04-05
 #### Miscellaneous Chores
 - update CI - ([eb833f9](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/eb833f9ccb3605acf9fc4ecd21e2d9e4deed4f32)) - Oluf Lorenzen
