@@ -4,8 +4,9 @@ A Python script that exports Immich statistics as Prometheus metrics using the I
 
 ## Grafana
 
-<img alt="Screenshot of a grafana dashboard for the exported data" src="grafana/screenshot.png" />
+[Dashboard.json](/grafana/immic-stats-dashboard.json)
 
+![Screenshot of a grafana dashboard for the exported data](grafana/screenshot.png)
 
 ## Features
 
