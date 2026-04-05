@@ -2,6 +2,11 @@
 
 A Python script that exports Immich statistics as Prometheus metrics using the Immich OpenAPI specification.
 
+## Grafana
+
+<img alt="Screenshot of a grafana dashboard for the exported data" src="grafana/screenshot.png" />
+
+
 ## Features
 
 This exporter collects and exports the following metrics:
