@@ -12,7 +12,7 @@ jobs:
       new: ${{ steps.get_versions.outputs.new }}
       new_dev: ${{ steps.get_versions.outputs.new_dev }}
     steps:
-      - uses: https://code.forgejo.org/actions/checkout@v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-tags: true
           fetch-depth: 30
@@ -69,7 +69,7 @@ jobs:
     needs: determine_versions
 
     steps:
-      - uses: https://code.forgejo.org/actions/checkout@v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 10
           fetch-tags: true
@@ -81,7 +81,7 @@ jobs:
           forgejo-curl.sh api_json ${{ env.FORGEJO_SERVER_URL }}/api/v1/user
 
       - name: Install uv and set the python version
-        uses: https://github.com/astral-sh/setup-uv@v8.0.0
+        uses: https://github.com/astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         id: setup-uv
         with:
           python-version: "3.13"
@@ -148,12 +148,12 @@ jobs:
         run: |
           echo "server_domain=$(echo '${{ github.api_url }}' | awk -F'[/:]' '{print $4}')" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
-      - uses: https://code.forgejo.org/actions/checkout@v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-tags: true
           fetch-depth: 30
       - name: Install uv and set the python version
-        uses: https://github.com/astral-sh/setup-uv@v8.0.0
+        uses: https://github.com/astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         id: setup-uv
         with:
           python-version: ${{ matrix.python-version }}
@@ -178,15 +178,15 @@ jobs:
           apt-get install -y docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       
       - name: Setup Docker Buildx
-        uses: https://github.com/docker/setup-buildx-action@v1
+        uses: https://github.com/docker/setup-buildx-action@f211e3e9ded2d9377c8cadc4489a4e38014bc4c9 # v1
       - name: Login to Container Registry
-        uses: https://github.com/docker/login-action@v3
+        uses: https://github.com/docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ steps.server_domain.outputs.server_domain }}
           username: ${{ github.repository_owner }}
           password: ${{ secrets.PACKAGE_UPLOAD_TOKEN }}
       - name: Build and Push
-        uses: docker/build-push-action@v6.18.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           push: true
