@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.14](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/8d61382b188c8b935595294d0fcdf82f0fa385a0..2.0.14) - 2026-04-13
+#### Miscellaneous Chores
+- (**deps**) update all dependencies - ([8d61382](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/8d61382b188c8b935595294d0fcdf82f0fa385a0)) - Renovate Bot
+
+- - -
+
 ## [2.0.13](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/49b3fc8a3e07be24170302dac2ac64a9f26132ce..2.0.13) - 2026-04-11
 #### Miscellaneous Chores
 - (**deps**) update all dependencies - ([49b3fc8](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/49b3fc8a3e07be24170302dac2ac64a9f26132ce)) - Renovate Bot
