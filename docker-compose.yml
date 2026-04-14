@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   immich-exporter:
-    image: git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter:2.0.13
+    image: git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter:2.0.15
     container_name: immich-prometheus-exporter
     environment:
       # Export command environment variables
