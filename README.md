@@ -39,6 +39,13 @@ This exporter collects and exports the following metrics:
 ### System Metrics
 - `immich_exporter_last_scrape_timestamp_ms` - Timestamp of last successful scrape
 
+## Alternative projects
+
+- <https://github.com/eithan1231/immich-exporter>
+- <https://github.com/patte/immich_stats_exporter>
+- <https://github.com/KryptionX/immich-prometheus-exporter> - based on this project
+- <https://github.com/victorarias/immich-prometheus-exporter> - also includes job statistics
+
 ## Requirements
 
 - Python 3.7+
