@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.35](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/0ff66b6d3781d45aa855b53de29175aece4f6125..2.0.35) - 2026-07-08
+#### Miscellaneous Chores
+- (**deps**) update node:24-bookworm docker digest to 392e1e2 - ([0ff66b6](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/0ff66b6d3781d45aa855b53de29175aece4f6125)) - Renovate Bot
+
+- - -
+
 ## [2.0.34](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/921677de544d1c0784c1f32a76a2dac7b1ccd825..2.0.34) - 2026-06-29
 #### Miscellaneous Chores
 - (**deps**) update python:3.13-slim docker digest to eb43ff1 - ([921677d](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/921677de544d1c0784c1f32a76a2dac7b1ccd825)) - Renovate Bot
