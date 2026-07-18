@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [2.0.39](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/412a9d82995c48a6738f92b157d11cf464861626..2.0.39) - 2026-07-18
+#### Miscellaneous Chores
+- (**deps**) update https://code.forgejo.org/actions/checkout digest to de0fac2 - ([412a9d8](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/412a9d82995c48a6738f92b157d11cf464861626)) - renovate-forgejo
+
+- - -
+
 ## [2.0.38](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/d2f09b9c810d4f45a008f0cbbbecd0fc12317c51..2.0.38) - 2026-07-17
 #### Miscellaneous Chores
 - (**deps**) update python:3.13-slim docker digest to 6771159 - ([d2f09b9](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/d2f09b9c810d4f45a008f0cbbbecd0fc12317c51)) - Renovate Bot
