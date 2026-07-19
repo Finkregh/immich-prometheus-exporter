@@ -12,7 +12,7 @@ jobs:
       new: ${{ steps.get_versions.outputs.new }}
       new_dev: ${{ steps.get_versions.outputs.new_dev }}
     steps:
-      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6.0.2
         with:
           fetch-tags: true
           fetch-depth: 30
@@ -69,7 +69,7 @@ jobs:
     needs: determine_versions
 
     steps:
-      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6.0.2
         with:
           fetch-depth: 10
           fetch-tags: true
@@ -148,7 +148,7 @@ jobs:
         run: |
           echo "server_domain=$(echo '${{ github.api_url }}' | awk -F'[/:]' '{print $4}')" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
-      - uses: https://code.forgejo.org/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: https://code.forgejo.org/actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6.0.2
         with:
           fetch-tags: true
           fetch-depth: 30
