@@ -258,7 +258,7 @@ wheels = [
 
 [[package]]
 name = "immich-prometheus-exporter"
-version = "2.0.44"
+version = "2.0.45"
 source = { editable = "." }
 dependencies = [
     { name = "prometheus-client" },
