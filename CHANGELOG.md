@@ -2,6 +2,21 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [3.0.0](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/compare/c9ee616334f519d384a047864b3399f27d81e10b..3.0.0) - 2026-08-10
+#### Features
+- (**jobs**) expose per-queue Immich job metrics - ([b7f6617](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/b7f6617b4361f900993ef3ec34e64e4307827410)) - Oluf Lorenzen
+- ![BREAKING](https://img.shields.io/badge/BREAKING-red) (**metrics**) add server statistics, health, maintenance & user admin metrics - ([7e93f4e](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/7e93f4e98ac777df1fefe4669e8c6e7067d6d918)) - Oluf Lorenzen
+#### Bug Fixes
+- (**grafana**) update dashboard for renamed user metrics - ([484143d](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/484143d1af23db6d0dd537202297addcc4a9fd7a)) - Oluf Lorenzen
+#### Documentation
+- compat immich v3.1.0 - ([0dd057a](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/0dd057a4e06abdc256eaaf89209385573d134f32)) - Oluf Lorenzen
+#### Miscellaneous Chores
+- (**deps**) update https://code.forgejo.org/actions/checkout digest to fbc6f39 - ([c9ee616](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/c9ee616334f519d384a047864b3399f27d81e10b)) - Renovate Bot
+- formatting - ([05d5817](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/05d5817d491cd31259c864685eca1e860f49b99c)) - Oluf Lorenzen
+- formatting - ([4172430](https://https://git.h.oluflorenzen.de/finkregh/immich-prometheus-exporter/commit/417243014b8e0689b7abc4329350fde20d0f7d9d)) - Oluf Lorenzen
+
+- - -
+
 ## [3.0.0] - unreleased
 #### Features
 - compat: verified against Immich server v3.1.0 API; no code changes required — all consumed endpoints and response DTOs unchanged from v1.137.3
