@@ -13,6 +13,7 @@ A Python script that exports Immich statistics as Prometheus metrics using the I
 This exporter collects and exports the following metrics:
 
 ### User Metrics
+
 - `immich_user_total_assets` - Total number of assets per user
 - `immich_user_images_count` - Number of images per user  
 - `immich_user_videos_count` - Number of videos per user
@@ -20,23 +21,27 @@ This exporter collects and exports the following metrics:
 - `immich_user_quota_usage_bytes` - User quota usage in bytes (if configured)
 
 ### Album Metrics
+
 - `immich_albums_owned_total` - Total number of albums owned by users
 - `immich_albums_shared_total` - Total number of shared albums
 - `immich_albums_not_shared_total` - Total number of albums not shared
 
 ### Library Metrics
+
 - `immich_library_total_assets` - Total number of assets per library
 - `immich_library_photos_count` - Number of photos per library
 - `immich_library_videos_count` - Number of videos per library
 - `immich_library_usage_bytes` - Library usage in bytes
 
 ### Storage Metrics
+
 - `immich_storage_disk_size_bytes` - Total disk size in bytes
 - `immich_storage_disk_use_bytes` - Used disk space in bytes
 - `immich_storage_disk_available_bytes` - Available disk space in bytes
 - `immich_storage_disk_usage_percentage` - Disk usage percentage
 
 ### System Metrics
+
 - `immich_exporter_last_scrape_timestamp_ms` - Timestamp of last successful scrape
 
 ## Alternative projects
@@ -63,11 +68,13 @@ Tested against Immich server v3.1.0. All previously used API endpoints (/admin/u
 
 1. Clone or download this repository
 2. Install the package:
+
    ```bash
    pip install .
    ```
-   
+
    Or for development:
+
    ```bash
    pip install -e .
    ```
@@ -76,6 +83,7 @@ Tested against Immich server v3.1.0. All previously used API endpoints (/admin/u
 
 1. Clone or download this repository
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -85,16 +93,19 @@ Tested against Immich server v3.1.0. All previously used API endpoints (/admin/u
 ### Basic Export (one-time)
 
 **If installed as a package:**
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
 
 **If running directly:**
+
 ```bash
 python3 immich-prometheus-exporter.py export --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
 
 Export metrics to a file:
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY --output metrics.txt
 ```
@@ -102,6 +113,7 @@ immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API
 ### Continuous Export
 
 Export metrics every 60 seconds:
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY --interval 60
 ```
@@ -109,6 +121,7 @@ immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API
 ### Test Connection
 
 Test your connection and API key:
+
 ```bash
 immich-prometheus-exporter test-connection --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
@@ -123,11 +136,13 @@ immich-prometheus-exporter test-connection --url http://localhost:2283 --api-key
 ### Help
 
 Get help for all commands:
+
 ```bash
 immich-prometheus-exporter --help
 ```
 
 Get help for a specific command:
+
 ```bash
 immich-prometheus-exporter export --help
 ```
@@ -202,10 +217,12 @@ docker-compose up
 The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. Each command has its own set of environment variables:
 
 #### Global Options
+
 - `IMMICHEXPORTER_INSTALL_COMPLETION` - Install completion for the current shell
 - `IMMICHEXPORTER_SHOW_COMPLETION` - Show completion for the current shell
 
 #### Export Command
+
 - `IMMICHEXPORTER_EXPORT_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_EXPORT_API_KEY` - Immich API key (required)
 - `IMMICHEXPORTER_EXPORT_OUTPUT` - Output file path (optional)
@@ -215,6 +232,7 @@ The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. E
 - `IMMICHEXPORTER_EXPORT_LOG_TO_STDOUT` - Log to stdout instead of stderr (optional)
 
 #### Serve Command
+
 - `IMMICHEXPORTER_SERVE_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_SERVE_API_KEY` - Immich API key (required)
 - `IMMICHEXPORTER_SERVE_PORT` - Port to serve metrics on (default: 8000)
@@ -222,6 +240,7 @@ The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. E
 - `IMMICHEXPORTER_SERVE_LOG_FILE` - Log file path (optional)
 
 #### Test Connection Command
+
 - `IMMICHEXPORTER_TEST_CONNECTION_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_TEST_CONNECTION_API_KEY` - Immich API key (required)
 
@@ -272,15 +291,18 @@ immich_storage_disk_size_bytes 1000000000000
 ## Troubleshooting
 
 ### Connection Issues
+
 - Verify your Immich server URL is correct and accessible
 - Check that your API key is valid and has admin privileges
 - Ensure Immich server is running and responding
 
 ### Permission Issues
+
 - Make sure your API key has admin privileges
 - Some endpoints require specific permissions - check Immich logs for details
 
 ### Missing Metrics
+
 - If user quotas are not configured, quota metrics won't appear
 - Libraries are only available if you have external libraries configured
 - Some metrics may be 0 if no data exists
@@ -288,6 +310,7 @@ immich_storage_disk_size_bytes 1000000000000
 ## Development
 
 The script is built using:
+
 - **typer** for CLI interface
 - **requests** for HTTP requests (reliable and user-friendly HTTP library)
 - **json** for API response parsing
