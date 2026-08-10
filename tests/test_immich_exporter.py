@@ -8,8 +8,10 @@ import os
 
 # Import the modules we want to test
 import sys
+from unittest import mock
 
 import pytest
+import requests
 import responses
 from typer.testing import CliRunner
 
@@ -66,6 +68,145 @@ MOCK_JOBS_RESPONSE = {
 }
 
 
+# Shared fixture used by server-statistics tests. Includes Alice (u1) with
+# non-zero counts, Bob (u2) with all-zero counts, and no entry for Carol (u3)
+# to exercise the "user in /admin/users but missing from usageByUser" path.
+MOCK_SERVER_STATISTICS = {
+    "photos": 12345,
+    "videos": 678,
+    "usage": 987_654_321,
+    "usagePhotos": 800_000_000,
+    "usageVideos": 187_654_321,
+    "usageByUser": [
+        {
+            "userId": "u1",
+            "userName": "Alice",
+            "photos": 100,
+            "videos": 5,
+            "usage": 12_345_678,
+            "usagePhotos": 12_000_000,
+            "usageVideos": 345_678,
+            "quotaSizeInBytes": 50_000_000_000,
+        },
+        {
+            "userId": "u2",
+            "userName": "Bob",
+            "photos": 0,
+            "videos": 0,
+            "usage": 0,
+            "usagePhotos": 0,
+            "usageVideos": 0,
+            "quotaSizeInBytes": 0,
+        },
+    ],
+}
+
+
+MOCK_MAINTENANCE_ACTIVE = {
+    "active": True,
+    "progress": 42,
+    "action": "restore_database",
+    "task": "restoring users table",
+}
+
+
+MOCK_MAINTENANCE_IDLE = {
+    "active": False,
+    "progress": 0,
+    "action": "end",
+    "task": "",
+}
+
+
+MOCK_PING_OK = {"res": "pong"}
+
+
+# Extended admin/users fixture: Alice is an admin with an active status, Bob
+# is a regular active user, Carol is being removed and has a non-null
+# deletedAt.
+MOCK_ADMIN_USERS_EXTENDED = [
+    {
+        "id": "u1",
+        "name": "Alice",
+        "email": "alice@example.com",
+        "quotaSizeInBytes": 50_000_000_000,
+        "quotaUsageInBytes": 12_345_678,
+        "isAdmin": True,
+        "status": "active",
+        "deletedAt": None,
+    },
+    {
+        "id": "u2",
+        "name": "Bob",
+        "email": "bob@example.com",
+        "quotaSizeInBytes": None,
+        "quotaUsageInBytes": None,
+        "isAdmin": False,
+        "status": "active",
+        "deletedAt": None,
+    },
+    {
+        "id": "u3",
+        "name": "Carol",
+        "email": "carol@example.com",
+        "quotaSizeInBytes": None,
+        "quotaUsageInBytes": None,
+        "isAdmin": False,
+        "status": "removing",
+        "deletedAt": "2024-06-01T00:00:00.000Z",
+    },
+]
+
+
+def _register_stub_immich_endpoints() -> None:
+    """Register mock responses for endpoints the collector calls but the test
+    does not care about (albums, libraries, storage, jobs, ping, maintenance).
+    Uses zero-payload responses so a full ``collect()`` succeeds without
+    surfacing errors from unrelated collectors.
+    """
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/albums/statistics",
+        json={"owned": 0, "shared": 0, "notShared": 0},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/libraries",
+        json=[],
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/server/storage",
+        json={
+            "diskSizeRaw": 0,
+            "diskUseRaw": 0,
+            "diskAvailableRaw": 0,
+            "diskUsagePercentage": 0,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/jobs",
+        json={},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/server/ping",
+        json=MOCK_PING_OK,
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "http://localhost:2283/api/admin/maintenance/status",
+        json=MOCK_MAINTENANCE_IDLE,
+        status=200,
+    )
+
+
 class TestImmichAPI:
     """Test the ImmichAPI class"""
 
@@ -104,27 +245,6 @@ class TestImmichAPI:
         assert len(users) == 2
         assert users[0]["name"] == "John Doe"
         assert users[1]["name"] == "Jane Smith"
-
-    @responses.activate
-    def test_get_user_statistics(self) -> None:
-        """Test getting user statistics"""
-        mock_stats = {
-            "total": 1250,
-            "images": 1000,
-            "videos": 250,
-        }
-
-        responses.add(
-            responses.GET,
-            "http://localhost:2283/api/admin/users/user1/statistics",
-            json=mock_stats,
-            status=200,
-        )
-
-        stats = self.api.get_user_statistics("user1")
-        assert stats["total"] == 1250
-        assert stats["images"] == 1000
-        assert stats["videos"] == 250
 
     @responses.activate
     def test_get_album_statistics(self) -> None:
@@ -292,6 +412,109 @@ class TestImmichAPI:
         jobs = self.api.get_all_jobs_status()
         assert jobs == {}
 
+    @responses.activate
+    def test_get_server_statistics(self) -> None:
+        """Test getting instance-wide server statistics"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
+            status=200,
+        )
+
+        stats = self.api.get_server_statistics()
+        assert stats["photos"] == 12345
+        assert stats["videos"] == 678
+        assert isinstance(stats["usageByUser"], list)
+        assert len(stats["usageByUser"]) == 2
+
+    @responses.activate
+    def test_get_server_statistics_non_dict_response(self) -> None:
+        """Test handling when server statistics endpoint returns non-dict"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json=[],
+            status=200,
+        )
+
+        assert self.api.get_server_statistics() == {}
+
+    @responses.activate
+    def test_ping_ok(self) -> None:
+        """Test the ping probe with a valid pong response"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json=MOCK_PING_OK,
+            status=200,
+        )
+
+        assert self.api.ping() is True
+
+    @responses.activate
+    def test_ping_wrong_body(self) -> None:
+        """Test the ping probe with a non-pong body returns False"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json={"res": "not-pong"},
+            status=200,
+        )
+
+        assert self.api.ping() is False
+
+    @responses.activate
+    def test_ping_http_error(self) -> None:
+        """Test the ping probe with an HTTP 500 returns False without raising"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json={"error": "boom"},
+            status=500,
+        )
+
+        assert self.api.ping() is False
+
+    @responses.activate
+    def test_ping_network_error(self) -> None:
+        """Test the ping probe with a network error returns False"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            body=requests.exceptions.ConnectionError("boom"),
+        )
+
+        assert self.api.ping() is False
+
+    @responses.activate
+    def test_get_maintenance_status(self) -> None:
+        """Test getting maintenance status"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=MOCK_MAINTENANCE_ACTIVE,
+            status=200,
+        )
+
+        status = self.api.get_maintenance_status()
+        assert status["active"] is True
+        assert status["progress"] == 42
+        assert status["action"] == "restore_database"
+        assert status["task"] == "restoring users table"
+
+    @responses.activate
+    def test_get_maintenance_status_non_dict_response(self) -> None:
+        """Test handling when maintenance endpoint returns non-dict"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=[],
+            status=200,
+        )
+
+        assert self.api.get_maintenance_status() == {}
+
 
 class TestPrometheusExporter:
     """Test the PrometheusExporter class"""
@@ -327,49 +550,70 @@ class TestPrometheusExporter:
 
     @responses.activate
     def test_collect_user_metrics(self) -> None:
-        """Test collecting user metrics"""
-        # Mock users response
-        mock_users = [
-            {
-                "id": "user1",
-                "name": "John Doe",
-                "email": "john@example.com",
-                "quotaSizeInBytes": 1000000000,
-                "quotaUsageInBytes": 500000000,
-            },
-        ]
+        """Test collecting user metrics
 
+        Verifies the refactored user-metric flow: per-user counts come from
+        /server/statistics.usageByUser, admin/status/deleted come from
+        /admin/users, and no per-user /admin/users/{id}/statistics calls are
+        made. Also guards the schema break (removed metrics, dropped
+        user_email label).
+        """
         responses.add(
             responses.GET,
             "http://localhost:2283/api/admin/users",
-            json=mock_users,
+            json=MOCK_ADMIN_USERS_EXTENDED,
             status=200,
         )
-
-        # Mock user statistics response
-        mock_stats = {
-            "total": 1250,
-            "images": 1000,
-            "videos": 250,
-        }
-
         responses.add(
             responses.GET,
-            "http://localhost:2283/api/admin/users/user1/statistics",
-            json=mock_stats,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
             status=200,
         )
 
         self.exporter.collect_user_metrics()
         metrics = self.exporter.export_metrics()
 
-        assert "immich_user_total_assets" in metrics
-        assert "immich_user_images_count" in metrics
-        assert "immich_user_videos_count" in metrics
+        # New metric names present.
+        assert "immich_user_photos" in metrics
+        assert "immich_user_videos" in metrics
+        assert "immich_user_usage_bytes" in metrics
+        assert "immich_user_usage_photos_bytes" in metrics
+        assert "immich_user_usage_videos_bytes" in metrics
         assert "immich_user_quota_bytes" in metrics
         assert "immich_user_quota_usage_bytes" in metrics
-        assert 'user_name="John Doe"' in metrics
-        assert 'user_email="john@example.com"' in metrics
+        assert "immich_user_admin" in metrics
+        assert "immich_user_status" in metrics
+        assert "immich_user_deleted" in metrics
+
+        # Legacy metric names must be gone.
+        assert "immich_user_total_assets" not in metrics
+        assert "immich_user_images_count" not in metrics
+        assert "immich_user_videos_count" not in metrics
+
+        # user_email label must be gone from every immich_user_* sample.
+        for line in metrics.splitlines():
+            if line.startswith("immich_user_"):
+                assert "user_email=" not in line, line
+
+        # Alice's values were sourced from /server/statistics.
+        assert 'user_name="Alice"' in metrics
+        assert 'immich_user_photos{user_id="u1",user_name="Alice"} 100' in metrics
+        assert 'immich_user_admin{user_id="u1",user_name="Alice"} 1' in metrics
+        # Carol is missing from usageByUser but still emits zero samples for
+        # every per-user metric, and is flagged as deleted / removing.
+        assert 'immich_user_photos{user_id="u3",user_name="Carol"} 0' in metrics
+        assert 'immich_user_deleted{user_id="u3",user_name="Carol"} 1' in metrics
+        assert (
+            'immich_user_status{user_id="u3",user_name="Carol",status="removing"} 1'
+            in metrics
+        )
+
+        # No requests should have been made to /admin/users/{id}/statistics.
+        for call in responses.calls:
+            assert "/admin/users/" not in call.request.url.split("/api")[-1] or (
+                call.request.url.endswith("/api/admin/users")
+            ), call.request.url
 
     @responses.activate
     def test_collect_album_metrics(self) -> None:
@@ -544,27 +788,11 @@ class TestImmichCollector:
         )
         responses.add(
             responses.GET,
-            "http://localhost:2283/api/albums/statistics",
-            json={"owned": 0, "shared": 0, "notShared": 0},
+            "http://localhost:2283/api/server/statistics",
+            json={},
             status=200,
         )
-        responses.add(
-            responses.GET,
-            "http://localhost:2283/api/libraries",
-            json=[],
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            "http://localhost:2283/api/server/storage",
-            json={
-                "diskSizeRaw": 0,
-                "diskUseRaw": 0,
-                "diskAvailableRaw": 0,
-                "diskUsagePercentage": 0,
-            },
-            status=200,
-        )
+        _register_stub_immich_endpoints()
 
         metrics = list(self.collector.collect())
 
@@ -576,42 +804,167 @@ class TestImmichCollector:
         assert timestamp_metric.name == "immich_exporter_last_scrape_timestamp_ms"
         assert timestamp_metric.documentation == "Timestamp of last successful scrape"
 
+        # immich_up must be second (right after timestamp) and always emit.
+        assert metrics[1].name == "immich_up"
+
     @responses.activate
     def test_collect_user_metrics(self):
-        """Test collecting user metrics via collector"""
-        # Mock users response
-        mock_users = [
-            {
-                "id": "user1",
-                "name": "John Doe",
-                "email": "john@example.com",
-                "quotaSizeInBytes": 1000000000,
-                "quotaUsageInBytes": 500000000,
-            },
-        ]
+        """Test collecting user metrics via collector.
 
+        Verifies the refactored user-metric flow: per-user counts come from
+        /server/statistics.usageByUser, admin/status/deleted come from
+        /admin/users, and no per-user /admin/users/{id}/statistics calls are
+        made. Also guards the schema break.
+        """
         responses.add(
             responses.GET,
             "http://localhost:2283/api/admin/users",
-            json=mock_users,
+            json=MOCK_ADMIN_USERS_EXTENDED,
             status=200,
         )
-
-        # Mock user statistics response
-        mock_stats = {
-            "total": 1250,
-            "images": 1000,
-            "videos": 250,
-        }
-
         responses.add(
             responses.GET,
-            "http://localhost:2283/api/admin/users/user1/statistics",
-            json=mock_stats,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
             status=200,
         )
+        _register_stub_immich_endpoints()
 
-        # Mock other endpoints to avoid errors
+        # Regression guard: no per-user /admin/users/{id}/statistics calls
+        # must be made. The URL is not registered with `responses`, so any
+        # actual call would raise ConnectionError; we additionally inspect
+        # `responses.calls` to make the invariant explicit.
+        metrics = list(self.collector.collect())
+        assert not any(
+            "/admin/users/" in call.request.url
+            and call.request.url.endswith("/statistics")
+            for call in responses.calls
+        )
+
+        # Extract families whose name starts with immich_user_.
+        user_metrics = {m.name: m for m in metrics if m.name.startswith("immich_user_")}
+
+        # New metric families present.
+        for name in (
+            "immich_user_photos",
+            "immich_user_videos",
+            "immich_user_usage_bytes",
+            "immich_user_usage_photos_bytes",
+            "immich_user_usage_videos_bytes",
+            "immich_user_quota_bytes",
+            "immich_user_quota_usage_bytes",
+            "immich_user_admin",
+            "immich_user_status",
+            "immich_user_deleted",
+        ):
+            assert name in user_metrics, f"missing {name}"
+
+        # Legacy metric families must be gone.
+        assert "immich_user_total_assets" not in user_metrics
+        assert "immich_user_images_count" not in user_metrics
+        assert "immich_user_videos_count" not in user_metrics
+
+        # No sample anywhere carries a user_email label.
+        for family in user_metrics.values():
+            for sample in family.samples:
+                assert "user_email" not in sample.labels, sample
+
+        def sample_value(family_name, **labels):
+            for sample in user_metrics[family_name].samples:
+                if all(sample.labels.get(k) == v for k, v in labels.items()):
+                    return sample.value
+            return None
+
+        # Alice: sourced from /server/statistics.
+        assert sample_value("immich_user_photos", user_id="u1") == 100
+        assert sample_value("immich_user_videos", user_id="u1") == 5
+        assert sample_value("immich_user_admin", user_id="u1") == 1
+        assert sample_value("immich_user_deleted", user_id="u1") == 0
+
+        # Bob: present in both /admin/users and /server/statistics with zeros.
+        assert sample_value("immich_user_photos", user_id="u2") == 0
+        assert sample_value("immich_user_admin", user_id="u2") == 0
+
+        # Carol: in /admin/users but absent from usageByUser -> zero samples,
+        # non-null deletedAt and "removing" status.
+        assert sample_value("immich_user_photos", user_id="u3") == 0
+        assert sample_value("immich_user_deleted", user_id="u3") == 1
+        assert sample_value("immich_user_status", user_id="u3", status="removing") == 1
+        # And there is only one status sample for u3 (stateset shape).
+        u3_status_samples = [
+            s
+            for s in user_metrics["immich_user_status"].samples
+            if s.labels.get("user_id") == "u3"
+        ]
+        assert len(u3_status_samples) == 1
+
+        # No sample line should have carried a user_email label. Same guard
+        # via the label-set of every family.
+        for family in user_metrics.values():
+            for sample in family.samples:
+                assert set(sample.labels).issubset({"user_id", "user_name", "status"})
+
+    @responses.activate
+    def test_collect_server_statistics_shared_with_user_metrics(self):
+        """``/server/statistics`` must be fetched at most once per scrape."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=MOCK_ADMIN_USERS_EXTENDED,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
+            status=200,
+        )
+        _register_stub_immich_endpoints()
+
+        with mock.patch.object(
+            ImmichAPI,
+            "get_server_statistics",
+            wraps=self.api.get_server_statistics,
+        ) as mocked_get:
+            list(self.collector.collect())
+            assert mocked_get.call_count == 1
+
+    @responses.activate
+    def test_collect_up_metric_ok(self):
+        """immich_up == 1 when /server/ping returns pong."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={},
+            status=200,
+        )
+        _register_stub_immich_endpoints()
+
+        metrics = list(self.collector.collect())
+        up = next(m for m in metrics if m.name == "immich_up")
+        assert up.samples[0].value == 1
+
+    @responses.activate
+    def test_collect_up_metric_failure(self):
+        """immich_up == 0 when /server/ping returns a 500."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={},
+            status=200,
+        )
         responses.add(
             responses.GET,
             "http://localhost:2283/api/albums/statistics",
@@ -635,20 +988,163 @@ class TestImmichCollector:
             },
             status=200,
         )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json={"error": "boom"},
+            status=500,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=MOCK_MAINTENANCE_IDLE,
+            status=200,
+        )
 
         metrics = list(self.collector.collect())
+        up = next(m for m in metrics if m.name == "immich_up")
+        assert up.samples[0].value == 0
 
-        # Find user metrics
-        user_metrics = [m for m in metrics if m.name.startswith("immich_user_")]
+    @responses.activate
+    def test_collect_server_statistics(self):
+        """Instance-wide server statistics gauges have the expected values."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
+            status=200,
+        )
+        _register_stub_immich_endpoints()
+
+        metrics = list(self.collector.collect())
+        server_metrics = {
+            m.name: m for m in metrics if m.name.startswith("immich_server_")
+        }
+        assert set(server_metrics) == {
+            "immich_server_photos",
+            "immich_server_videos",
+            "immich_server_usage_bytes",
+            "immich_server_usage_photos_bytes",
+            "immich_server_usage_videos_bytes",
+        }
+        assert server_metrics["immich_server_photos"].samples[0].value == 12345
+        assert server_metrics["immich_server_videos"].samples[0].value == 678
         assert (
-            len(user_metrics) >= 3
-        )  # At least total_assets, images_count, videos_count
+            server_metrics["immich_server_usage_bytes"].samples[0].value == 987_654_321
+        )
+        assert (
+            server_metrics["immich_server_usage_photos_bytes"].samples[0].value
+            == 800_000_000
+        )
+        assert (
+            server_metrics["immich_server_usage_videos_bytes"].samples[0].value
+            == 187_654_321
+        )
 
-        # Check specific metrics exist
-        metric_names = [m.name for m in user_metrics]
-        assert "immich_user_total_assets" in metric_names
-        assert "immich_user_images_count" in metric_names
-        assert "immich_user_videos_count" in metric_names
+    @responses.activate
+    def test_collect_maintenance_metrics_active(self):
+        """immich_maintenance_* reflects an active maintenance payload."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/albums/statistics",
+            json={"owned": 0, "shared": 0, "notShared": 0},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/storage",
+            json={
+                "diskSizeRaw": 0,
+                "diskUseRaw": 0,
+                "diskAvailableRaw": 0,
+                "diskUsagePercentage": 0,
+            },
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json=MOCK_PING_OK,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=MOCK_MAINTENANCE_ACTIVE,
+            status=200,
+        )
+
+        metrics = list(self.collector.collect())
+        active = next(m for m in metrics if m.name == "immich_maintenance_active")
+        progress = next(m for m in metrics if m.name == "immich_maintenance_progress")
+
+        assert active.samples[0].labels == {
+            "action": "restore_database",
+            "task": "restoring users table",
+        }
+        assert active.samples[0].value == 1
+        assert progress.samples[0].value == 42
+
+    @responses.activate
+    def test_collect_maintenance_metrics_idle(self):
+        """immich_maintenance_* reports zeros when idle."""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={},
+            status=200,
+        )
+        _register_stub_immich_endpoints()
+
+        metrics = list(self.collector.collect())
+        active = next(m for m in metrics if m.name == "immich_maintenance_active")
+        progress = next(m for m in metrics if m.name == "immich_maintenance_progress")
+
+        assert active.samples[0].labels == {"action": "end", "task": ""}
+        assert active.samples[0].value == 0
+        assert progress.samples[0].value == 0
 
     @responses.activate
     def test_collect_error_handling(self):
@@ -924,6 +1420,32 @@ class TestCLICommands:
             status=200,
         )
 
+        # Mocks for the diagnostic checks the command now performs.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json=MOCK_PING_OK,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=MOCK_MAINTENANCE_ACTIVE,
+            status=200,
+        )
+
         result = self.runner.invoke(
             app,
             [
@@ -938,6 +1460,9 @@ class TestCLICommands:
         assert result.exit_code == 0
         assert "Connection successful" in result.stdout
         assert "Admin access confirmed" in result.stdout
+        assert "Server statistics reachable" in result.stdout
+        assert "Immich reachable (ping=pong)" in result.stdout
+        assert "Maintenance status reachable" in result.stdout
 
     @responses.activate
     def test_failed_test_connection(self):
@@ -974,21 +1499,7 @@ class TestIntegration:
     def test_full_export_workflow(self):
         """Test the complete export workflow with realistic data"""
         # Mock all API endpoints with realistic data
-        mock_users = [
-            {
-                "id": "user1",
-                "name": "John Doe",
-                "email": "john@example.com",
-                "quotaSizeInBytes": 1000000000,
-                "quotaUsageInBytes": 500000000,
-            },
-        ]
-
-        mock_user_stats = {
-            "total": 1250,
-            "images": 1000,
-            "videos": 250,
-        }
+        mock_users = MOCK_ADMIN_USERS_EXTENDED
 
         mock_album_stats = {
             "owned": 15,
@@ -1000,7 +1511,7 @@ class TestIntegration:
             {
                 "id": "lib1",
                 "name": "Photos Library",
-                "ownerId": "user1",
+                "ownerId": "u1",
             },
         ]
 
@@ -1027,8 +1538,8 @@ class TestIntegration:
         )
         responses.add(
             responses.GET,
-            "http://localhost:2283/api/admin/users/user1/statistics",
-            json=mock_user_stats,
+            "http://localhost:2283/api/server/statistics",
+            json=MOCK_SERVER_STATISTICS,
             status=200,
         )
         responses.add(
@@ -1055,6 +1566,24 @@ class TestIntegration:
             json=mock_storage,
             status=200,
         )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json=MOCK_PING_OK,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json=MOCK_MAINTENANCE_ACTIVE,
+            status=200,
+        )
 
         # Create API and exporter
         api = ImmichAPI("http://localhost:2283", "test-api-key")
@@ -1066,11 +1595,14 @@ class TestIntegration:
 
         # Verify all expected metrics are present
         expected_metrics = [
-            "immich_user_total_assets",
-            "immich_user_images_count",
-            "immich_user_videos_count",
+            "immich_user_photos",
+            "immich_user_videos",
+            "immich_user_usage_bytes",
             "immich_user_quota_bytes",
             "immich_user_quota_usage_bytes",
+            "immich_user_admin",
+            "immich_user_status",
+            "immich_user_deleted",
             "immich_albums_owned_total",
             "immich_albums_shared_total",
             "immich_albums_not_shared_total",
@@ -1082,18 +1614,30 @@ class TestIntegration:
             "immich_storage_disk_use_bytes",
             "immich_storage_disk_available_bytes",
             "immich_storage_disk_usage_percentage",
+            "immich_server_photos",
+            "immich_server_videos",
+            "immich_server_usage_bytes",
+            "immich_up",
+            "immich_maintenance_active",
+            "immich_maintenance_progress",
         ]
 
         for metric in expected_metrics:
             assert metric in metrics, f"Missing metric: {metric}"
 
+        # Legacy metric names must be gone.
+        assert "immich_user_total_assets" not in metrics
+        assert "immich_user_images_count" not in metrics
+        assert "immich_user_videos_count" not in metrics
+
         # Verify specific values
-        assert "immich_user_total_assets{" in metrics
-        assert "1250" in metrics  # user total assets
+        assert "immich_user_photos{" in metrics
         assert "immich_albums_owned_total 15" in metrics
         assert "immich_library_total_assets{" in metrics
         assert "5000" in metrics  # library total assets
         assert "immich_storage_disk_size_bytes 1000000000000" in metrics
+        assert "immich_up 1" in metrics
+        assert "immich_server_photos 12345" in metrics
 
 
 if __name__ == "__main__":

@@ -152,17 +152,6 @@ class ImmichAPI:
         result = self._make_request("/admin/users")
         return result if isinstance(result, list) else []
 
-    def get_user_statistics(self, user_id: str) -> dict[str, Any]:
-        """Get statistics for a specific user.
-
-        :param user_id: The unique identifier of the user.
-        :type user_id: str
-        :return: Dictionary containing user statistics or empty dict if request fails.
-        :rtype: dict[str, Any]
-        """
-        result = self._make_request(f"/admin/users/{user_id}/statistics")
-        return result if isinstance(result, dict) else {}
-
     def get_album_statistics(self) -> dict[str, Any]:
         """Get album statistics.
 
@@ -214,6 +203,52 @@ class ImmichAPI:
         result = self._make_request("/jobs")
         return result if isinstance(result, dict) else {}
 
+    def get_server_statistics(self) -> dict[str, Any]:
+        """Get instance-wide server statistics.
+
+        Calls ``GET /api/server/statistics`` (operationId
+        ``getServerStatistics``). Response is ``ServerStatsResponseDto`` with
+        top-level ``photos``, ``videos``, ``usage``, ``usagePhotos``,
+        ``usageVideos``, and a per-user ``usageByUser`` array.
+
+        :return: Dictionary containing server statistics or empty dict if the
+            request fails or the response is not a dict.
+        :rtype: dict[str, Any]
+        """
+        result = self._make_request("/server/statistics")
+        return result if isinstance(result, dict) else {}
+
+    def ping(self) -> bool:
+        """Probe ``GET /api/server/ping`` and return reachability as a bool.
+
+        This is the only API method that swallows exceptions: it is a health
+        probe and callers rely on the returned bool to drive the ``immich_up``
+        gauge without a surrounding try/except at every call site.
+
+        :return: ``True`` iff the response is a dict and ``dict.get("res")``
+            equals ``"pong"``, else ``False``.
+        :rtype: bool
+        """
+        try:
+            result = self._make_request("/server/ping")
+        except Exception:
+            return False
+        return isinstance(result, dict) and result.get("res") == "pong"
+
+    def get_maintenance_status(self) -> dict[str, Any]:
+        """Get Immich maintenance status.
+
+        Calls ``GET /api/admin/maintenance/status`` (operationId
+        ``getMaintenanceStatus``). Response is ``MaintenanceStatusResponseDto``
+        with ``active``, ``progress``, ``action``, and ``task`` fields.
+
+        :return: Dictionary containing maintenance status or empty dict if the
+            request fails or the response is not a dict.
+        :rtype: dict[str, Any]
+        """
+        result = self._make_request("/admin/maintenance/status")
+        return result if isinstance(result, dict) else {}
+
 
 class ImmichCollector(Collector):
     """Custom Prometheus collector for Immich metrics"""
@@ -225,6 +260,21 @@ class ImmichCollector(Collector):
         :type api: ImmichAPI
         """
         self.api = api
+        # Per-scrape memo cache for /server/statistics so that user metrics
+        # and instance-wide server statistics can share a single fetch. Reset
+        # at the top of every collect() call.
+        self._server_stats_cache: dict[str, Any] | None = None
+
+    def _get_server_stats_this_scrape(self) -> dict[str, Any]:
+        """Return the /server/statistics payload, fetching at most once per scrape.
+
+        :return: The cached ``ServerStatsResponseDto`` dict for the current
+            scrape, or ``{}`` if the fetch failed.
+        :rtype: dict[str, Any]
+        """
+        if self._server_stats_cache is None:
+            self._server_stats_cache = self.api.get_server_statistics()
+        return self._server_stats_cache
 
     def collect(self) -> Iterator[GaugeMetricFamily | CounterMetricFamily]:
         """Collect metrics from Immich API and yield metric families.
@@ -232,6 +282,9 @@ class ImmichCollector(Collector):
         :return: Iterator of metric families.
         :rtype: Iterator[GaugeMetricFamily | CounterMetricFamily]
         """
+        # Reset per-scrape memoisation of /server/statistics.
+        self._server_stats_cache = None
+
         # Yield timestamp metric
         timestamp = int(time.time() * 1000)
         timestamp_metric = GaugeMetricFamily(
@@ -240,6 +293,10 @@ class ImmichCollector(Collector):
         )
         timestamp_metric.add_metric([], timestamp)
         yield timestamp_metric
+
+        # Health probe first, so alerting always sees an up sample even if
+        # every other collector explodes.
+        yield from self._collect_up_metric()
 
         # Collect user metrics
         yield from self._collect_user_metrics()
@@ -253,11 +310,22 @@ class ImmichCollector(Collector):
         # Collect storage metrics
         yield from self._collect_storage_metrics()
 
+        # Collect instance-wide server statistics
+        yield from self._collect_server_statistics()
+
+        # Collect maintenance status
+        yield from self._collect_maintenance_metrics()
+
         # Collect job metrics
         yield from self._collect_job_metrics()
 
     def _collect_user_metrics(self) -> Iterator[GaugeMetricFamily]:
         """Collect metrics for all users.
+
+        Per-user asset counts and usage bytes are sourced from a single
+        ``/server/statistics`` call (via the per-scrape memo cache). Admin
+        flag, status, deletion state, and quota fields come from the already
+        fetched ``/admin/users`` response.
 
         :return: Iterator of user metric families.
         :rtype: Iterator[GaugeMetricFamily]
@@ -266,74 +334,123 @@ class ImmichCollector(Collector):
             users = self.api.get_all_users()
             log.info(f"Found {len(users)} users")
 
-            # Create metric families
-            total_assets_metric = GaugeMetricFamily(
-                "immich_user_total_assets",
-                "Total number of assets for user",
-                labels=["user_id", "user_name", "user_email"],
-            )
-            images_metric = GaugeMetricFamily(
-                "immich_user_images_count",
-                "Number of images for user",
-                labels=["user_id", "user_name", "user_email"],
+            server_stats = self._get_server_stats_this_scrape()
+            usage_by_user_list = server_stats.get("usageByUser") or []
+            usage_by_user = {
+                entry.get("userId"): entry
+                for entry in usage_by_user_list
+                if isinstance(entry, dict) and entry.get("userId")
+            }
+
+            user_labels = ["user_id", "user_name"]
+
+            photos_metric = GaugeMetricFamily(
+                "immich_user_photos",
+                "Number of photo assets owned by user",
+                labels=user_labels,
             )
             videos_metric = GaugeMetricFamily(
-                "immich_user_videos_count",
-                "Number of videos for user",
-                labels=["user_id", "user_name", "user_email"],
+                "immich_user_videos",
+                "Number of video assets owned by user",
+                labels=user_labels,
+            )
+            usage_metric = GaugeMetricFamily(
+                "immich_user_usage_bytes",
+                "Total storage used by user, in bytes",
+                labels=user_labels,
+            )
+            usage_photos_metric = GaugeMetricFamily(
+                "immich_user_usage_photos_bytes",
+                "Storage used by user's photo assets, in bytes",
+                labels=user_labels,
+            )
+            usage_videos_metric = GaugeMetricFamily(
+                "immich_user_usage_videos_bytes",
+                "Storage used by user's video assets, in bytes",
+                labels=user_labels,
             )
             quota_metric = GaugeMetricFamily(
                 "immich_user_quota_bytes",
                 "User quota in bytes",
-                labels=["user_id", "user_name", "user_email"],
+                labels=user_labels,
             )
             quota_usage_metric = GaugeMetricFamily(
                 "immich_user_quota_usage_bytes",
                 "User quota usage in bytes",
-                labels=["user_id", "user_name", "user_email"],
+                labels=user_labels,
+            )
+            admin_metric = GaugeMetricFamily(
+                "immich_user_admin",
+                "1 if the user has admin privileges, else 0",
+                labels=user_labels,
+            )
+            status_metric = GaugeMetricFamily(
+                "immich_user_status",
+                "User account status (stateset: emitted once per user with "
+                "the current status as a label)",
+                labels=[*user_labels, "status"],
+            )
+            deleted_metric = GaugeMetricFamily(
+                "immich_user_deleted",
+                "1 if the user has a non-null deletedAt timestamp, else 0",
+                labels=user_labels,
             )
 
             for user in users:
-                user_id = user["id"]
-                user_name = user["name"]
-                user_email = user["email"]
+                user_id = user.get("id", "")
+                user_name = user.get("name", "")
 
-                log.debug(f"Processing user: {user_name} ({user_email})")
+                log.debug(f"Processing user: {user_name}")
 
-                try:
-                    stats = self.api.get_user_statistics(user_id)
-                    labels = [user_id, user_name, user_email]
+                usage_entry = usage_by_user.get(user_id, {}) or {}
+                labels = [user_id, user_name]
 
-                    # Add metrics for this user
-                    total_assets_metric.add_metric(labels, stats.get("total", 0))
-                    images_metric.add_metric(labels, stats.get("images", 0))
-                    videos_metric.add_metric(labels, stats.get("videos", 0))
+                photos_metric.add_metric(labels, usage_entry.get("photos", 0) or 0)
+                videos_metric.add_metric(labels, usage_entry.get("videos", 0) or 0)
+                usage_metric.add_metric(labels, usage_entry.get("usage", 0) or 0)
+                usage_photos_metric.add_metric(
+                    labels,
+                    usage_entry.get("usagePhotos", 0) or 0,
+                )
+                usage_videos_metric.add_metric(
+                    labels,
+                    usage_entry.get("usageVideos", 0) or 0,
+                )
 
-                    # User quota and usage (if available)
-                    if (
-                        "quotaSizeInBytes" in user
-                        and user["quotaSizeInBytes"] is not None
-                    ):
-                        quota_metric.add_metric(labels, user["quotaSizeInBytes"])
+                # Quota fields come from /admin/users (authoritative and
+                # present even for users with no usageByUser row yet).
+                quota_size = user.get("quotaSizeInBytes")
+                if quota_size is not None:
+                    quota_metric.add_metric(labels, quota_size)
 
-                    if (
-                        "quotaUsageInBytes" in user
-                        and user["quotaUsageInBytes"] is not None
-                    ):
-                        quota_usage_metric.add_metric(labels, user["quotaUsageInBytes"])
+                quota_usage = user.get("quotaUsageInBytes")
+                if quota_usage is not None:
+                    quota_usage_metric.add_metric(labels, quota_usage)
 
-                    log.debug(f"Successfully collected metrics for user: {user_name}")
+                admin_metric.add_metric(
+                    labels,
+                    1 if user.get("isAdmin") else 0,
+                )
 
-                except Exception as e:
-                    log.error(f"Error getting statistics for user {user_name}: {e}")
-                    continue
+                status_value = str(user.get("status") or "").lower()
+                status_metric.add_metric([*labels, status_value], 1)
 
-            # Yield all user metrics
-            yield total_assets_metric
-            yield images_metric
-            yield videos_metric
+                deleted_metric.add_metric(
+                    labels,
+                    1 if user.get("deletedAt") else 0,
+                )
+
+            # Yield in alphabetical order for readability.
+            yield admin_metric
+            yield deleted_metric
+            yield photos_metric
             yield quota_metric
             yield quota_usage_metric
+            yield status_metric
+            yield usage_metric
+            yield usage_photos_metric
+            yield usage_videos_metric
+            yield videos_metric
 
         except Exception as e:
             log.error(f"Error collecting user metrics: {e}")
@@ -488,6 +605,112 @@ class ImmichCollector(Collector):
         except Exception as e:
             log.error(f"Error collecting storage metrics: {e}")
 
+    def _collect_up_metric(self) -> Iterator[GaugeMetricFamily]:
+        """Emit the ``immich_up`` health gauge.
+
+        Never raises: ``self.api.ping()`` already returns a bool. The gauge is
+        emitted on every scrape, including when other collectors fail.
+
+        :return: Iterator yielding the single ``immich_up`` metric family.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        up_metric = GaugeMetricFamily(
+            "immich_up",
+            "1 if the Immich API responded to /server/ping successfully, 0 otherwise",
+        )
+        up_metric.add_metric([], 1 if self.api.ping() else 0)
+        yield up_metric
+
+    def _collect_server_statistics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect instance-wide server statistics from ``/server/statistics``.
+
+        Only emits the top-level totals; per-user rows are handled by
+        ``_collect_user_metrics`` from the same memoised fetch.
+
+        :return: Iterator of server statistics metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            stats = self._get_server_stats_this_scrape()
+
+            photos_metric = GaugeMetricFamily(
+                "immich_server_photos",
+                "Total number of photo assets across the Immich instance",
+            )
+            photos_metric.add_metric([], stats.get("photos", 0) or 0)
+            yield photos_metric
+
+            videos_metric = GaugeMetricFamily(
+                "immich_server_videos",
+                "Total number of video assets across the Immich instance",
+            )
+            videos_metric.add_metric([], stats.get("videos", 0) or 0)
+            yield videos_metric
+
+            usage_metric = GaugeMetricFamily(
+                "immich_server_usage_bytes",
+                "Total storage used by assets across the Immich instance, in bytes",
+            )
+            usage_metric.add_metric([], stats.get("usage", 0) or 0)
+            yield usage_metric
+
+            usage_photos_metric = GaugeMetricFamily(
+                "immich_server_usage_photos_bytes",
+                "Total storage used by photo assets, in bytes",
+            )
+            usage_photos_metric.add_metric([], stats.get("usagePhotos", 0) or 0)
+            yield usage_photos_metric
+
+            usage_videos_metric = GaugeMetricFamily(
+                "immich_server_usage_videos_bytes",
+                "Total storage used by video assets, in bytes",
+            )
+            usage_videos_metric.add_metric([], stats.get("usageVideos", 0) or 0)
+            yield usage_videos_metric
+
+            log.info("Successfully collected server statistics")
+
+        except Exception as e:
+            log.error(f"Error collecting server statistics: {e}")
+
+    def _collect_maintenance_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect Immich maintenance status metrics.
+
+        Emits two gauges labelled with (``action``, ``task``): an active flag
+        and a 0-100 progress value.
+
+        :return: Iterator of maintenance metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        try:
+            status = self.api.get_maintenance_status()
+
+            action = str(status.get("action") or "")
+            task = str(status.get("task") or "")
+            active_value = 1 if status.get("active") else 0
+            progress_value = status.get("progress", 0) or 0
+
+            active_metric = GaugeMetricFamily(
+                "immich_maintenance_active",
+                "1 if an Immich maintenance action is currently in progress, else 0",
+                labels=["action", "task"],
+            )
+            active_metric.add_metric([action, task], active_value)
+            yield active_metric
+
+            progress_metric = GaugeMetricFamily(
+                "immich_maintenance_progress",
+                "Progress of the current Immich maintenance action, 0\u2013100",
+                labels=["action", "task"],
+            )
+            progress_metric.add_metric([action, task], progress_value)
+            yield progress_metric
+
+            log.info("Successfully collected maintenance metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting maintenance metrics: {e}")
+
     def _collect_job_metrics(self) -> Iterator[GaugeMetricFamily]:
         """Collect metrics for all Immich job queues.
 
@@ -583,6 +806,20 @@ class PrometheusExporter:
         self.api: ImmichAPI = api
         self.metrics: list[str] = []
         self._help_type_added: set[str] = set()
+        # Per-scrape memo cache for /server/statistics, shared by
+        # collect_user_metrics and collect_server_statistics.
+        self._server_stats_cache: dict[str, Any] | None = None
+
+    def _get_server_stats_this_scrape(self) -> dict[str, Any]:
+        """Return the /server/statistics payload, fetching at most once per scrape.
+
+        :return: The cached ``ServerStatsResponseDto`` dict for the current
+            scrape, or ``{}`` if the fetch failed.
+        :rtype: dict[str, Any]
+        """
+        if self._server_stats_cache is None:
+            self._server_stats_cache = self.api.get_server_statistics()
+        return self._server_stats_cache
 
     def _add_metric(
         self,
@@ -618,81 +855,108 @@ class PrometheusExporter:
     def collect_user_metrics(self) -> None:
         """Collect metrics for all users.
 
-        Retrieves user statistics from Immich API and adds them as Prometheus metrics.
-        Includes total assets, images, videos, and quota information if available.
+        Per-user asset counts and usage bytes come from a single
+        ``/server/statistics`` call (via the per-scrape memo cache). Admin flag,
+        status, deletion state, and quota fields come from the already
+        fetched ``/admin/users`` response.
         """
         try:
             users = self.api.get_all_users()
             log.info(f"Found {len(users)} users")
 
+            server_stats = self._get_server_stats_this_scrape()
+            usage_by_user_list = server_stats.get("usageByUser") or []
+            usage_by_user = {
+                entry.get("userId"): entry
+                for entry in usage_by_user_list
+                if isinstance(entry, dict) and entry.get("userId")
+            }
+
             for user in users:
-                user_id = user["id"]
-                user_name = user["name"]
-                user_email = user["email"]
+                user_id = user.get("id", "")
+                user_name = user.get("name", "")
 
-                log.debug(f"Processing user: {user_name} ({user_email})")
+                log.debug(f"Processing user: {user_name}")
 
-                try:
-                    stats = self.api.get_user_statistics(user_id)
+                labels = {
+                    "user_id": user_id,
+                    "user_name": user_name,
+                }
+                usage_entry = usage_by_user.get(user_id, {}) or {}
 
-                    labels = {
-                        "user_id": user_id,
-                        "user_name": user_name,
-                        "user_email": user_email,
-                    }
+                self._add_metric(
+                    "immich_user_photos",
+                    usage_entry.get("photos", 0) or 0,
+                    labels,
+                    "Number of photo assets owned by user",
+                )
+                self._add_metric(
+                    "immich_user_videos",
+                    usage_entry.get("videos", 0) or 0,
+                    labels,
+                    "Number of video assets owned by user",
+                )
+                self._add_metric(
+                    "immich_user_usage_bytes",
+                    usage_entry.get("usage", 0) or 0,
+                    labels,
+                    "Total storage used by user, in bytes",
+                )
+                self._add_metric(
+                    "immich_user_usage_photos_bytes",
+                    usage_entry.get("usagePhotos", 0) or 0,
+                    labels,
+                    "Storage used by user's photo assets, in bytes",
+                )
+                self._add_metric(
+                    "immich_user_usage_videos_bytes",
+                    usage_entry.get("usageVideos", 0) or 0,
+                    labels,
+                    "Storage used by user's video assets, in bytes",
+                )
 
-                    # Total assets
+                quota_size = user.get("quotaSizeInBytes")
+                if quota_size is not None:
                     self._add_metric(
-                        "immich_user_total_assets",
-                        stats.get("total", 0),
+                        "immich_user_quota_bytes",
+                        quota_size,
                         labels,
-                        "Total number of assets for user",
+                        "User quota in bytes",
                     )
 
-                    # Images
+                quota_usage = user.get("quotaUsageInBytes")
+                if quota_usage is not None:
                     self._add_metric(
-                        "immich_user_images_count",
-                        stats.get("images", 0),
+                        "immich_user_quota_usage_bytes",
+                        quota_usage,
                         labels,
-                        "Number of images for user",
+                        "User quota usage in bytes",
                     )
 
-                    # Videos
-                    self._add_metric(
-                        "immich_user_videos_count",
-                        stats.get("videos", 0),
-                        labels,
-                        "Number of videos for user",
-                    )
+                self._add_metric(
+                    "immich_user_admin",
+                    1 if user.get("isAdmin") else 0,
+                    labels,
+                    "1 if the user has admin privileges, else 0",
+                )
 
-                    # User quota and usage (if available)
-                    if (
-                        "quotaSizeInBytes" in user
-                        and user["quotaSizeInBytes"] is not None
-                    ):
-                        self._add_metric(
-                            "immich_user_quota_bytes",
-                            user["quotaSizeInBytes"],
-                            labels,
-                            "User quota in bytes",
-                        )
+                status_value = str(user.get("status") or "").lower()
+                self._add_metric(
+                    "immich_user_status",
+                    1,
+                    {**labels, "status": status_value},
+                    "User account status (stateset: emitted once per user "
+                    "with the current status as a label)",
+                )
 
-                    if (
-                        "quotaUsageInBytes" in user
-                        and user["quotaUsageInBytes"] is not None
-                    ):
-                        self._add_metric(
-                            "immich_user_quota_usage_bytes",
-                            user["quotaUsageInBytes"],
-                            labels,
-                            "User quota usage in bytes",
-                        )
+                self._add_metric(
+                    "immich_user_deleted",
+                    1 if user.get("deletedAt") else 0,
+                    labels,
+                    "1 if the user has a non-null deletedAt timestamp, else 0",
+                )
 
-                    log.debug(f"Successfully collected metrics for user: {user_name}")
-
-                except Exception as e:
-                    log.error(f"Error getting statistics for user {user_name}: {e}")
-                    continue
+                log.debug(f"Successfully collected metrics for user: {user_name}")
 
         except Exception as e:
             log.error(f"Error collecting user metrics: {e}")
@@ -897,12 +1161,99 @@ class PrometheusExporter:
         except Exception as e:
             log.error(f"Error collecting job metrics: {e}")
 
+    def collect_up_metric(self) -> None:
+        """Emit the ``immich_up`` health gauge.
+
+        Never raises: ``self.api.ping()`` already returns a bool.
+        """
+        self._add_metric(
+            "immich_up",
+            1 if self.api.ping() else 0,
+            help_text=(
+                "1 if the Immich API responded to /server/ping successfully, "
+                "0 otherwise"
+            ),
+        )
+
+    def collect_server_statistics(self) -> None:
+        """Collect instance-wide server statistics from ``/server/statistics``.
+
+        Only emits the top-level totals; per-user rows are handled by
+        ``collect_user_metrics`` from the same memoised fetch.
+        """
+        try:
+            stats = self._get_server_stats_this_scrape()
+
+            self._add_metric(
+                "immich_server_photos",
+                stats.get("photos", 0) or 0,
+                help_text="Total number of photo assets across the Immich instance",
+            )
+            self._add_metric(
+                "immich_server_videos",
+                stats.get("videos", 0) or 0,
+                help_text="Total number of video assets across the Immich instance",
+            )
+            self._add_metric(
+                "immich_server_usage_bytes",
+                stats.get("usage", 0) or 0,
+                help_text=(
+                    "Total storage used by assets across the Immich instance, in bytes"
+                ),
+            )
+            self._add_metric(
+                "immich_server_usage_photos_bytes",
+                stats.get("usagePhotos", 0) or 0,
+                help_text="Total storage used by photo assets, in bytes",
+            )
+            self._add_metric(
+                "immich_server_usage_videos_bytes",
+                stats.get("usageVideos", 0) or 0,
+                help_text="Total storage used by video assets, in bytes",
+            )
+
+            log.info("Successfully collected server statistics")
+
+        except Exception as e:
+            log.error(f"Error collecting server statistics: {e}")
+
+    def collect_maintenance_metrics(self) -> None:
+        """Collect Immich maintenance status metrics."""
+        try:
+            status = self.api.get_maintenance_status()
+
+            action = str(status.get("action") or "")
+            task = str(status.get("task") or "")
+            labels = {"action": action, "task": task}
+
+            self._add_metric(
+                "immich_maintenance_active",
+                1 if status.get("active") else 0,
+                labels,
+                "1 if an Immich maintenance action is currently in progress, else 0",
+            )
+            self._add_metric(
+                "immich_maintenance_progress",
+                status.get("progress", 0) or 0,
+                labels,
+                "Progress of the current Immich maintenance action, 0\u2013100",
+            )
+
+            log.info("Successfully collected maintenance metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting maintenance metrics: {e}")
+
     def collect_all_metrics(self) -> None:
         """Collect all metrics.
 
-        Orchestrates the collection of all metric types: user, album, library,
-        storage, and job metrics.
+        Orchestrates the collection of all metric types. Order matches
+        ``ImmichCollector.collect``: health probe first, then per-entity
+        families, then instance-wide server stats, maintenance, and jobs.
         """
+        log.info("Collecting health metric...")
+        self.collect_up_metric()
+
         log.info("Collecting user metrics...")
         self.collect_user_metrics()
 
@@ -914,6 +1265,12 @@ class PrometheusExporter:
 
         log.info("Collecting storage metrics...")
         self.collect_storage_metrics()
+
+        log.info("Collecting server statistics...")
+        self.collect_server_statistics()
+
+        log.info("Collecting maintenance metrics...")
+        self.collect_maintenance_metrics()
 
         log.info("Collecting job metrics...")
         self.collect_job_metrics()
@@ -928,6 +1285,7 @@ class PrometheusExporter:
         """
         self.metrics = []
         self._help_type_added = set()
+        self._server_stats_cache = None
 
     def export_metrics(self) -> str:
         """Export metrics in Prometheus format.
@@ -1220,6 +1578,38 @@ def test_connection(
             typer.echo(f"✅ Jobs endpoint reachable ({len(jobs)} queues)")
         except Exception as e:
             typer.echo(f"⚠️  Jobs endpoint check failed: {e}", err=True)
+
+        # Test server statistics endpoint reachability (admin-only)
+        try:
+            server_stats = api.get_server_statistics()
+            typer.echo(
+                "✅ Server statistics reachable "
+                f"(photos={server_stats.get('photos', 0)}, "
+                f"videos={server_stats.get('videos', 0)}, "
+                f"users={len(server_stats.get('usageByUser') or [])})",
+            )
+        except Exception as e:
+            typer.echo(f"⚠️  Server statistics check failed: {e}", err=True)
+
+        # Test /server/ping reachability (does not require auth).
+        try:
+            if api.ping():
+                typer.echo("✅ Immich reachable (ping=pong)")
+            else:
+                typer.echo("⚠️  Ping check failed", err=True)
+        except Exception as e:
+            typer.echo(f"⚠️  Ping check failed: {e}", err=True)
+
+        # Test maintenance status reachability.
+        try:
+            maint = api.get_maintenance_status()
+            typer.echo(
+                "✅ Maintenance status reachable "
+                f"(active={maint.get('active')}, "
+                f"progress={maint.get('progress')})",
+            )
+        except Exception as e:
+            typer.echo(f"⚠️  Maintenance status check failed: {e}", err=True)
 
     except Exception as e:
         typer.echo(f"❌ Connection failed: {e}", err=True)

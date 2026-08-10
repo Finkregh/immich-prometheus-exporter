@@ -32,7 +32,8 @@ class TestDuplicateHelpType:
     @responses.activate
     def test_no_duplicate_help_type_with_multiple_users(self) -> None:
         """Test that HELP and TYPE are only emitted once per metric with multiple users"""
-        # Mock multiple users
+        # Mock multiple users using the new /admin/users schema (with
+        # isAdmin / status / deletedAt).
         mock_users = [
             {
                 "id": "user1",
@@ -40,6 +41,9 @@ class TestDuplicateHelpType:
                 "email": "john@example.com",
                 "quotaSizeInBytes": 1000000000,
                 "quotaUsageInBytes": 500000000,
+                "isAdmin": True,
+                "status": "active",
+                "deletedAt": None,
             },
             {
                 "id": "user2",
@@ -47,6 +51,9 @@ class TestDuplicateHelpType:
                 "email": "jane@example.com",
                 "quotaSizeInBytes": 2000000000,
                 "quotaUsageInBytes": 1000000000,
+                "isAdmin": False,
+                "status": "active",
+                "deletedAt": None,
             },
             {
                 "id": "user3",
@@ -54,6 +61,9 @@ class TestDuplicateHelpType:
                 "email": "bob@example.com",
                 "quotaSizeInBytes": None,
                 "quotaUsageInBytes": None,
+                "isAdmin": False,
+                "status": "removing",
+                "deletedAt": "2024-06-01T00:00:00.000Z",
             },
         ]
 
@@ -64,19 +74,43 @@ class TestDuplicateHelpType:
             status=200,
         )
 
-        # Mock user statistics for each user
-        for i, user in enumerate(mock_users, 1):
-            mock_stats = {
-                "total": 1000 * i,
-                "images": 800 * i,
-                "videos": 200 * i,
-            }
-            responses.add(
-                responses.GET,
-                f"http://localhost:2283/api/admin/users/{user['id']}/statistics",
-                json=mock_stats,
-                status=200,
-            )
+        # /server/statistics is the new source of per-user counts. Include
+        # entries for user1 and user2; user3 is omitted to exercise the
+        # "missing from usageByUser" path.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={
+                "photos": 3000,
+                "videos": 900,
+                "usage": 500,
+                "usagePhotos": 400,
+                "usageVideos": 100,
+                "usageByUser": [
+                    {
+                        "userId": "user1",
+                        "userName": "John Doe",
+                        "photos": 800,
+                        "videos": 200,
+                        "usage": 100,
+                        "usagePhotos": 80,
+                        "usageVideos": 20,
+                        "quotaSizeInBytes": 1000000000,
+                    },
+                    {
+                        "userId": "user2",
+                        "userName": "Jane Smith",
+                        "photos": 1600,
+                        "videos": 400,
+                        "usage": 200,
+                        "usagePhotos": 160,
+                        "usageVideos": 40,
+                        "quotaSizeInBytes": 2000000000,
+                    },
+                ],
+            },
+            status=200,
+        )
 
         # Collect user metrics
         self.exporter.collect_user_metrics()
@@ -86,8 +120,8 @@ class TestDuplicateHelpType:
         lines = metrics_output.split("\n")
 
         # Count HELP and TYPE occurrences for each metric
-        help_counts = {}
-        type_counts = {}
+        help_counts: dict[str, int] = {}
+        type_counts: dict[str, int] = {}
 
         for line in lines:
             if line.startswith("# HELP "):
@@ -97,13 +131,18 @@ class TestDuplicateHelpType:
                 metric_name = line.split()[2]  # Extract metric name
                 type_counts[metric_name] = type_counts.get(metric_name, 0) + 1
 
-        # Verify each metric has exactly one HELP and one TYPE line
+        # Verify each of the new user metrics has exactly one HELP and TYPE line.
         expected_metrics = [
-            "immich_user_total_assets",
-            "immich_user_images_count",
-            "immich_user_videos_count",
+            "immich_user_photos",
+            "immich_user_videos",
+            "immich_user_usage_bytes",
+            "immich_user_usage_photos_bytes",
+            "immich_user_usage_videos_bytes",
             "immich_user_quota_bytes",
             "immich_user_quota_usage_bytes",
+            "immich_user_admin",
+            "immich_user_status",
+            "immich_user_deleted",
         ]
 
         for metric in expected_metrics:
@@ -116,17 +155,30 @@ class TestDuplicateHelpType:
                     type_counts[metric] == 1
                 ), f"Metric {metric} has {type_counts[metric]} TYPE lines, expected 1"
 
-        # Also verify we have the expected number of data lines (one per user per metric)
-        # Count actual metric data lines (not HELP/TYPE)
-        data_lines = [line for line in lines if line and not line.startswith("#")]
+        # Legacy metric names must not appear.
+        for legacy in (
+            "immich_user_total_assets",
+            "immich_user_images_count",
+            "immich_user_videos_count",
+        ):
+            assert legacy not in help_counts, f"Legacy metric {legacy} still emitted"
+            assert legacy not in type_counts, f"Legacy metric {legacy} still emitted"
 
-        # We should have data lines for each user for each metric they have data for
-        # user1 and user2 have quota data, user3 doesn't
-        expected_data_lines = (
-            3
-            * 3  # 3 users * 3 basic metrics (total_assets, images_count, videos_count)
-            + 2 * 2  # 2 users * 2 quota metrics (quota_bytes, quota_usage_bytes)
-        )
+        # user_email must not appear on any immich_user_* sample.
+        for line in lines:
+            if line.startswith("immich_user_"):
+                assert "user_email=" not in line, line
+
+        # Data-line accounting per user (3 users total):
+        #   - 5 usage metrics (photos, videos, usage_bytes,
+        #     usage_photos_bytes, usage_videos_bytes) x 3 users = 15
+        #   - immich_user_admin x 3 users = 3
+        #   - immich_user_status x 3 users = 3
+        #   - immich_user_deleted x 3 users = 3
+        #   - immich_user_quota_bytes x 2 users (user3 has None) = 2
+        #   - immich_user_quota_usage_bytes x 2 users (user3 has None) = 2
+        data_lines = [line for line in lines if line and not line.startswith("#")]
+        expected_data_lines = 5 * 3 + 3 + 3 + 3 + 2 + 2
 
         assert (
             len(data_lines) == expected_data_lines
@@ -430,6 +482,63 @@ class TestDuplicateHelpType:
             status=200,
         )
 
+        # Mock the new endpoints introduced by the server-stats/health plan
+        # so collect_all_metrics can emit immich_up, server statistics, and
+        # maintenance metrics without spurious errors.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/statistics",
+            json={
+                "photos": 3000,
+                "videos": 900,
+                "usage": 500,
+                "usagePhotos": 400,
+                "usageVideos": 100,
+                "usageByUser": [
+                    {
+                        "userId": "user1",
+                        "userName": "John Doe",
+                        "photos": 1000,
+                        "videos": 300,
+                        "usage": 200,
+                        "usagePhotos": 150,
+                        "usageVideos": 50,
+                        "quotaSizeInBytes": 1000000000,
+                    },
+                    {
+                        "userId": "user2",
+                        "userName": "Jane Smith",
+                        "photos": 2000,
+                        "videos": 600,
+                        "usage": 300,
+                        "usagePhotos": 250,
+                        "usageVideos": 50,
+                        "quotaSizeInBytes": 2000000000,
+                    },
+                ],
+            },
+            status=200,
+        )
+
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/ping",
+            json={"res": "pong"},
+            status=200,
+        )
+
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/maintenance/status",
+            json={
+                "active": False,
+                "progress": 0,
+                "action": "end",
+                "task": "",
+            },
+            status=200,
+        )
+
         # Collect all metrics
         self.exporter.collect_all_metrics()
         metrics_output = self.exporter.export_metrics()
@@ -459,6 +568,28 @@ class TestDuplicateHelpType:
             assert (
                 count == 1
             ), f"Metric {metric_name} has {count} TYPE lines, expected 1"
+
+        # Verify the new metrics all have HELP/TYPE lines present.
+        for metric in (
+            "immich_server_photos",
+            "immich_server_videos",
+            "immich_server_usage_bytes",
+            "immich_server_usage_photos_bytes",
+            "immich_server_usage_videos_bytes",
+            "immich_up",
+            "immich_maintenance_active",
+            "immich_maintenance_progress",
+            "immich_user_photos",
+            "immich_user_videos",
+            "immich_user_usage_bytes",
+            "immich_user_usage_photos_bytes",
+            "immich_user_usage_videos_bytes",
+            "immich_user_admin",
+            "immich_user_status",
+            "immich_user_deleted",
+        ):
+            assert help_counts.get(metric) == 1, f"missing HELP for {metric}"
+            assert type_counts.get(metric) == 1, f"missing TYPE for {metric}"
 
         # Print debug info for manual inspection
         print(f"\nTotal lines: {len(lines)}")

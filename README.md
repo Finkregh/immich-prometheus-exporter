@@ -8,17 +8,56 @@ A Python script that exports Immich statistics as Prometheus metrics using the I
 
 ![Screenshot of a grafana dashboard for the exported data](grafana/screenshot.png)
 
+## Breaking Changes
+
+The server-stats and health-metrics refactor introduces the following
+breaking changes vs. the previous release:
+
+- **Removed**: `immich_user_total_assets`, `immich_user_images_count`,
+  `immich_user_videos_count`. Use `immich_user_photos` + `immich_user_videos`
+  (or their sum for the old "total").
+- **Removed label**: `user_email` is no longer emitted on any
+  `immich_user_*` metric. Use `user_id` / `user_name` for aggregation.
+- The N+1 `/admin/users/{id}/statistics` scraping loop has been replaced by
+  a single `/server/statistics` call.
+
 ## Features
 
 This exporter collects and exports the following metrics:
 
 ### User Metrics
 
-- `immich_user_total_assets` - Total number of assets per user
-- `immich_user_images_count` - Number of images per user  
-- `immich_user_videos_count` - Number of videos per user
+- `immich_user_photos` - Number of photo assets owned by user
+- `immich_user_videos` - Number of video assets owned by user
+- `immich_user_usage_bytes` - Total storage used by user, in bytes
+- `immich_user_usage_photos_bytes` - Storage used by user's photo assets, in bytes
+- `immich_user_usage_videos_bytes` - Storage used by user's video assets, in bytes
 - `immich_user_quota_bytes` - User quota in bytes (if configured)
 - `immich_user_quota_usage_bytes` - User quota usage in bytes (if configured)
+- `immich_user_admin` - 1 if the user has admin privileges, else 0
+- `immich_user_status{status}` - User account status (stateset: emitted once
+  per user with the current status as a label)
+- `immich_user_deleted` - 1 if the user has a non-null `deletedAt` timestamp,
+  else 0
+
+> The `user_email` label has been removed from every `immich_user_*` metric;
+> use `user_id` / `user_name` for aggregation.
+
+### Server Statistics
+
+- `immich_server_photos` - Total photo assets across the Immich instance
+- `immich_server_videos` - Total video assets across the Immich instance
+- `immich_server_usage_bytes` - Total storage used by assets across the instance, in bytes
+- `immich_server_usage_photos_bytes` - Storage used by photos across the instance, in bytes
+- `immich_server_usage_videos_bytes` - Storage used by videos across the instance, in bytes
+
+### Health & Maintenance
+
+- `immich_up` - 1 if the Immich API responded to `/server/ping` successfully, else 0
+- `immich_maintenance_active{action,task}` - 1 if an Immich maintenance action
+  is currently in progress, else 0
+- `immich_maintenance_progress{action,task}` - Progress of the current Immich
+  maintenance action, 0–100
 
 ### Album Metrics
 
@@ -55,6 +94,15 @@ sum(immich_job_queue_count{state="failed"})
 
 # Queues currently backlogged (waiting > 0)
 immich_job_queue_count{state="waiting"} > 0
+
+# Free capacity ratio
+1 - (immich_storage_disk_use_bytes / immich_storage_disk_size_bytes)
+
+# Storage by user, top 10
+topk(10, immich_user_usage_bytes)
+
+# Alert: Immich unreachable for 5 minutes
+avg_over_time(immich_up[5m]) < 1
 ```
 
 ### System Metrics
