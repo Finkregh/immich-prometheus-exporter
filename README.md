@@ -40,6 +40,23 @@ This exporter collects and exports the following metrics:
 - `immich_storage_disk_available_bytes` - Available disk space in bytes
 - `immich_storage_disk_usage_percentage` - Disk usage percentage
 
+### Job Metrics
+
+- `immich_job_queue_count{queue,state}` - Job counts per Immich queue and state
+  (state ∈ {active, waiting, completed, failed, delayed, paused})
+- `immich_job_queue_active{queue}` - 1 if the queue is active, else 0
+- `immich_job_queue_paused{queue}` - 1 if the queue is paused, else 0
+
+Example PromQL:
+
+```promql
+# Total failed jobs across all queues
+sum(immich_job_queue_count{state="failed"})
+
+# Queues currently backlogged (waiting > 0)
+immich_job_queue_count{state="waiting"} > 0
+```
+
 ### System Metrics
 
 - `immich_exporter_last_scrape_timestamp_ms` - Timestamp of last successful scrape
@@ -54,6 +71,8 @@ This exporter collects and exports the following metrics:
 ## Compatibility
 
 Tested against Immich server v3.1.0. All previously used API endpoints (/admin/users, /admin/users/{id}/statistics, /albums/statistics, /libraries, /libraries/{id}/statistics, /server/storage) are unchanged between v1.137.3 and v3.1.0. For older Immich v1.x / v2.x compatibility, use exporter versions prior to this release.
+
+The `/api/jobs` endpoint used for job metrics is present in both v1.137.3 and v3.1.0 with an identical response shape (in v3.1.0 the operationId was renamed to `getQueuesLegacy`, but the payload is unchanged). It requires an admin API key.
 
 ## Requirements
 

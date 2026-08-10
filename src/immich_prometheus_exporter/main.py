@@ -201,6 +201,19 @@ class ImmichAPI:
         result = self._make_request("/server/storage")
         return result if isinstance(result, dict) else {}
 
+    def get_all_jobs_status(self) -> dict[str, Any]:
+        """Get status of all Immich job queues.
+
+        Calls ``GET /api/jobs`` (operationId ``getAllJobsStatus`` on v1.137.3,
+        renamed to ``getQueuesLegacy`` on v3.1.0 with identical response shape).
+
+        :return: Mapping of queue name to job status dict, or empty dict if the
+            request fails or the response is not a dict.
+        :rtype: dict[str, Any]
+        """
+        result = self._make_request("/jobs")
+        return result if isinstance(result, dict) else {}
+
 
 class ImmichCollector(Collector):
     """Custom Prometheus collector for Immich metrics"""
@@ -239,6 +252,9 @@ class ImmichCollector(Collector):
 
         # Collect storage metrics
         yield from self._collect_storage_metrics()
+
+        # Collect job metrics
+        yield from self._collect_job_metrics()
 
     def _collect_user_metrics(self) -> Iterator[GaugeMetricFamily]:
         """Collect metrics for all users.
@@ -471,6 +487,88 @@ class ImmichCollector(Collector):
 
         except Exception as e:
             log.error(f"Error collecting storage metrics: {e}")
+
+    def _collect_job_metrics(self) -> Iterator[GaugeMetricFamily]:
+        """Collect metrics for all Immich job queues.
+
+        Emits three gauges:
+
+        * ``immich_job_queue_count`` with labels ``queue`` and ``state``
+          (state ∈ active, waiting, completed, failed, delayed, paused).
+        * ``immich_job_queue_active`` with label ``queue`` (1 if the queue
+          is active, else 0).
+        * ``immich_job_queue_paused`` with label ``queue`` (1 if the queue
+          is paused, else 0).
+
+        :return: Iterator of job metric families.
+        :rtype: Iterator[GaugeMetricFamily]
+        """
+        # Fixed state set: missing states default to 0 for a stable series set,
+        # and any new states Immich adds later are ignored (predictable cardinality).
+        job_states = (
+            "active",
+            "waiting",
+            "completed",
+            "failed",
+            "delayed",
+            "paused",
+        )
+
+        try:
+            jobs = self.api.get_all_jobs_status()
+            log.debug(f"Found {len(jobs)} job queues")
+
+            count_metric = GaugeMetricFamily(
+                "immich_job_queue_count",
+                "Number of jobs in an Immich queue by state "
+                "(active, waiting, completed, failed, delayed, paused)",
+                labels=["queue", "state"],
+            )
+            active_metric = GaugeMetricFamily(
+                "immich_job_queue_active",
+                "Whether the Immich queue is currently active (1) or not (0), "
+                "from queueStatus.isActive",
+                labels=["queue"],
+            )
+            paused_metric = GaugeMetricFamily(
+                "immich_job_queue_paused",
+                "Whether the Immich queue is currently paused (1) or not (0), "
+                "from queueStatus.isPaused",
+                labels=["queue"],
+            )
+
+            for queue_name, status in jobs.items():
+                # Defensive guards against unexpected payload shapes.
+                if not isinstance(queue_name, str) or not queue_name:
+                    continue
+                if not isinstance(status, dict):
+                    continue
+
+                job_counts = status.get("jobCounts", {}) or {}
+                for state in job_states:
+                    count_metric.add_metric(
+                        [queue_name, state],
+                        job_counts.get(state, 0),
+                    )
+
+                queue_status = status.get("queueStatus", {}) or {}
+                active_metric.add_metric(
+                    [queue_name],
+                    1 if queue_status.get("isActive") else 0,
+                )
+                paused_metric.add_metric(
+                    [queue_name],
+                    1 if queue_status.get("isPaused") else 0,
+                )
+
+            yield count_metric
+            yield active_metric
+            yield paused_metric
+
+            log.info("Successfully collected job metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting job metrics: {e}")
 
 
 class PrometheusExporter:
@@ -742,10 +840,68 @@ class PrometheusExporter:
         except Exception as e:
             log.error(f"Error collecting storage metrics: {e}")
 
+    def collect_job_metrics(self) -> None:
+        """Collect metrics for all Immich job queues.
+
+        Retrieves job queue status from the Immich API and adds one gauge per
+        (queue, state) pair for ``immich_job_queue_count``, plus per-queue
+        gauges for ``immich_job_queue_active`` and ``immich_job_queue_paused``.
+        """
+        job_states = (
+            "active",
+            "waiting",
+            "completed",
+            "failed",
+            "delayed",
+            "paused",
+        )
+
+        try:
+            jobs = self.api.get_all_jobs_status()
+            log.debug(f"Found {len(jobs)} job queues")
+
+            for queue_name, status in jobs.items():
+                if not isinstance(queue_name, str) or not queue_name:
+                    continue
+                if not isinstance(status, dict):
+                    continue
+
+                job_counts = status.get("jobCounts", {}) or {}
+                for state in job_states:
+                    self._add_metric(
+                        "immich_job_queue_count",
+                        job_counts.get(state, 0),
+                        {"queue": queue_name, "state": state},
+                        "Number of jobs in an Immich queue by state "
+                        "(active, waiting, completed, failed, delayed, paused)",
+                    )
+
+                queue_status = status.get("queueStatus", {}) or {}
+                self._add_metric(
+                    "immich_job_queue_active",
+                    1 if queue_status.get("isActive") else 0,
+                    {"queue": queue_name},
+                    "Whether the Immich queue is currently active (1) or not (0), "
+                    "from queueStatus.isActive",
+                )
+                self._add_metric(
+                    "immich_job_queue_paused",
+                    1 if queue_status.get("isPaused") else 0,
+                    {"queue": queue_name},
+                    "Whether the Immich queue is currently paused (1) or not (0), "
+                    "from queueStatus.isPaused",
+                )
+
+            log.info("Successfully collected job metrics")
+
+        except Exception as e:
+            log.error(f"Error collecting job metrics: {e}")
+
     def collect_all_metrics(self) -> None:
         """Collect all metrics.
 
-        Orchestrates the collection of all metric types: user, album, library, and storage metrics.
+        Orchestrates the collection of all metric types: user, album, library,
+        storage, and job metrics.
         """
         log.info("Collecting user metrics...")
         self.collect_user_metrics()
@@ -758,6 +914,9 @@ class PrometheusExporter:
 
         log.info("Collecting storage metrics...")
         self.collect_storage_metrics()
+
+        log.info("Collecting job metrics...")
+        self.collect_job_metrics()
 
         log.info("Metrics collection completed")
 
@@ -1054,6 +1213,13 @@ def test_connection(
         # Test admin access by getting users
         users = api.get_all_users()
         typer.echo(f"✅ Admin access confirmed! Found {len(users)} users")
+
+        # Test jobs endpoint reachability (admin-only)
+        try:
+            jobs = api.get_all_jobs_status()
+            typer.echo(f"✅ Jobs endpoint reachable ({len(jobs)} queues)")
+        except Exception as e:
+            typer.echo(f"⚠️  Jobs endpoint check failed: {e}", err=True)
 
     except Exception as e:
         typer.echo(f"❌ Connection failed: {e}", err=True)

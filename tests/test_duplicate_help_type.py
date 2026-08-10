@@ -222,6 +222,94 @@ class TestDuplicateHelpType:
         ), f"Expected {expected_data_lines} data lines, got {len(data_lines)}"
 
     @responses.activate
+    def test_no_duplicate_help_type_with_multiple_job_queues(self) -> None:
+        """Test that HELP and TYPE are only emitted once per job metric with multiple queues"""
+        mock_jobs = {
+            "metadataExtraction": {
+                "jobCounts": {
+                    "active": 1,
+                    "waiting": 2,
+                    "completed": 10,
+                    "failed": 0,
+                    "delayed": 0,
+                    "paused": 0,
+                },
+                "queueStatus": {"isActive": True, "isPaused": False},
+            },
+            "smartSearch": {
+                "jobCounts": {
+                    "active": 0,
+                    "waiting": 0,
+                    "completed": 0,
+                    "failed": 3,
+                    "delayed": 0,
+                    "paused": 0,
+                },
+                "queueStatus": {"isActive": False, "isPaused": True},
+            },
+            "thumbnailGeneration": {
+                "jobCounts": {
+                    "active": 0,
+                    "waiting": 5,
+                    "completed": 100,
+                    "failed": 0,
+                    "delayed": 0,
+                    "paused": 0,
+                },
+                "queueStatus": {"isActive": True, "isPaused": False},
+            },
+        }
+
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json=mock_jobs,
+            status=200,
+        )
+
+        # Collect job metrics
+        self.exporter.collect_job_metrics()
+        metrics_output = self.exporter.export_metrics()
+
+        lines = metrics_output.split("\n")
+
+        # Count HELP and TYPE occurrences for each metric
+        help_counts = {}
+        type_counts = {}
+
+        for line in lines:
+            if line.startswith("# HELP "):
+                metric_name = line.split()[2]
+                help_counts[metric_name] = help_counts.get(metric_name, 0) + 1
+            elif line.startswith("# TYPE "):
+                metric_name = line.split()[2]
+                type_counts[metric_name] = type_counts.get(metric_name, 0) + 1
+
+        # Verify each of the three new job metrics has exactly one HELP and TYPE line
+        expected_metrics = [
+            "immich_job_queue_count",
+            "immich_job_queue_active",
+            "immich_job_queue_paused",
+        ]
+
+        for metric in expected_metrics:
+            assert (
+                help_counts.get(metric) == 1
+            ), f"Metric {metric} has {help_counts.get(metric)} HELP lines, expected 1"
+            assert (
+                type_counts.get(metric) == 1
+            ), f"Metric {metric} has {type_counts.get(metric)} TYPE lines, expected 1"
+
+        # Data lines: 3 queues * 6 states = 18 for the count metric,
+        # + 3 for immich_job_queue_active, + 3 for immich_job_queue_paused = 24.
+        data_lines = [line for line in lines if line and not line.startswith("#")]
+        expected_data_lines = 3 * 6 + 3 + 3
+
+        assert (
+            len(data_lines) == expected_data_lines
+        ), f"Expected {expected_data_lines} data lines, got {len(data_lines)}"
+
+    @responses.activate
     def test_full_export_no_duplicate_help_type(self) -> None:
         """Test full export workflow doesn't produce duplicate HELP/TYPE lines"""
         # Mock all API endpoints with multiple entities
@@ -306,6 +394,38 @@ class TestDuplicateHelpType:
                 "diskUseRaw": 600000000000,
                 "diskAvailableRaw": 400000000000,
                 "diskUsagePercentage": 60.0,
+            },
+            status=200,
+        )
+
+        # Mock jobs endpoint with two queues, both active with a mix of counts,
+        # so collect_all_metrics() emits the three job metric families.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={
+                "metadataExtraction": {
+                    "jobCounts": {
+                        "active": 1,
+                        "waiting": 2,
+                        "completed": 10,
+                        "failed": 0,
+                        "delayed": 0,
+                        "paused": 0,
+                    },
+                    "queueStatus": {"isActive": True, "isPaused": False},
+                },
+                "smartSearch": {
+                    "jobCounts": {
+                        "active": 0,
+                        "waiting": 0,
+                        "completed": 0,
+                        "failed": 3,
+                        "delayed": 0,
+                        "paused": 0,
+                    },
+                    "queueStatus": {"isActive": False, "isPaused": True},
+                },
             },
             status=200,
         )

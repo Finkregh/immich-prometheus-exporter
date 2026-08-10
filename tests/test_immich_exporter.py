@@ -24,6 +24,48 @@ ImmichCollector = immich_prometheus_exporter.ImmichCollector
 app = immich_prometheus_exporter.app
 
 
+# Shared fixture used by API, collector, and exporter tests for the /api/jobs
+# endpoint. Covers three shapes:
+#   * metadataExtraction: all six counts non-zero, active queue, not paused.
+#   * smartSearch: paused queue with only failed>0, inactive.
+#   * thumbnailGeneration: missing 'waiting' key to exercise the default-to-0 path.
+MOCK_JOBS_RESPONSE = {
+    "metadataExtraction": {
+        "jobCounts": {
+            "active": 2,
+            "waiting": 5,
+            "completed": 100,
+            "failed": 1,
+            "delayed": 3,
+            "paused": 0,
+        },
+        "queueStatus": {"isActive": True, "isPaused": False},
+    },
+    "smartSearch": {
+        "jobCounts": {
+            "active": 0,
+            "waiting": 0,
+            "completed": 0,
+            "failed": 7,
+            "delayed": 0,
+            "paused": 0,
+        },
+        "queueStatus": {"isActive": False, "isPaused": True},
+    },
+    "thumbnailGeneration": {
+        "jobCounts": {
+            "active": 1,
+            # 'waiting' intentionally omitted to test default-to-0.
+            "completed": 50,
+            "failed": 0,
+            "delayed": 0,
+            "paused": 0,
+        },
+        "queueStatus": {"isActive": True, "isPaused": False},
+    },
+}
+
+
 class TestImmichAPI:
     """Test the ImmichAPI class"""
 
@@ -221,17 +263,34 @@ class TestImmichAPI:
         assert users == []
 
     @responses.activate
-    def test_non_dict_response_for_stats(self) -> None:
-        """Test handling when stats endpoint returns non-dict"""
+    def test_get_all_jobs_status(self) -> None:
+        """Test getting all job queue status"""
         responses.add(
             responses.GET,
-            "http://localhost:2283/api/admin/users/user1/statistics",
-            json=["not", "a", "dict"],
+            "http://localhost:2283/api/jobs",
+            json=MOCK_JOBS_RESPONSE,
             status=200,
         )
 
-        stats = self.api.get_user_statistics("user1")
-        assert stats == {}
+        jobs = self.api.get_all_jobs_status()
+        assert jobs == MOCK_JOBS_RESPONSE
+        assert "metadataExtraction" in jobs
+        assert "smartSearch" in jobs
+        assert jobs["smartSearch"]["jobCounts"]["failed"] == 7
+        assert jobs["smartSearch"]["queueStatus"]["isPaused"] is True
+
+    @responses.activate
+    def test_get_all_jobs_status_non_dict_response(self) -> None:
+        """Test handling when jobs endpoint returns non-dict"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json=[],
+            status=200,
+        )
+
+        jobs = self.api.get_all_jobs_status()
+        assert jobs == {}
 
 
 class TestPrometheusExporter:
@@ -421,6 +480,49 @@ class TestPrometheusExporter:
         # Should not contain user metrics due to error
         assert "immich_user_total_assets" not in metrics
 
+    @responses.activate
+    def test_collect_job_metrics(self):
+        """Test collecting job metrics via legacy text exporter"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json=MOCK_JOBS_RESPONSE,
+            status=200,
+        )
+
+        self.exporter.collect_job_metrics()
+        output = self.exporter.export_metrics()
+
+        # HELP and TYPE lines for each of the three metrics.
+        assert "# HELP immich_job_queue_count " in output
+        assert "# TYPE immich_job_queue_count gauge" in output
+        assert "# HELP immich_job_queue_active " in output
+        assert "# TYPE immich_job_queue_active gauge" in output
+        assert "# HELP immich_job_queue_paused " in output
+        assert "# TYPE immich_job_queue_paused gauge" in output
+
+        # Exactly one HELP/TYPE pair per metric name (regression guard).
+        for metric_name in (
+            "immich_job_queue_count",
+            "immich_job_queue_active",
+            "immich_job_queue_paused",
+        ):
+            assert output.count(f"# HELP {metric_name} ") == 1
+            assert output.count(f"# TYPE {metric_name} ") == 1
+
+        # Concrete sample lines from the fixture.
+        assert (
+            'immich_job_queue_count{queue="metadataExtraction",state="failed"} 1'
+            in output
+        )
+        assert 'immich_job_queue_count{queue="smartSearch",state="failed"} 7' in output
+        assert (
+            'immich_job_queue_count{queue="thumbnailGeneration",state="waiting"} 0'
+            in output
+        )
+        assert 'immich_job_queue_active{queue="smartSearch"} 0' in output
+        assert 'immich_job_queue_paused{queue="smartSearch"} 1' in output
+
 
 class TestImmichCollector:
     """Test the ImmichCollector class"""
@@ -583,6 +685,124 @@ class TestImmichCollector:
         # Should still have timestamp metric even if others fail
         assert len(metrics) >= 1
         assert metrics[0].name == "immich_exporter_last_scrape_timestamp_ms"
+
+    @responses.activate
+    def test_collect_job_metrics(self):
+        """Test collecting job metrics via collector"""
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json=MOCK_JOBS_RESPONSE,
+            status=200,
+        )
+
+        metrics = list(self.collector._collect_job_metrics())
+
+        # Expect exactly three GaugeMetricFamily instances.
+        assert len(metrics) == 3
+        metric_by_name = {m.name: m for m in metrics}
+        assert set(metric_by_name.keys()) == {
+            "immich_job_queue_count",
+            "immich_job_queue_active",
+            "immich_job_queue_paused",
+        }
+
+        count_metric = metric_by_name["immich_job_queue_count"]
+        active_metric = metric_by_name["immich_job_queue_active"]
+        paused_metric = metric_by_name["immich_job_queue_paused"]
+
+        # 3 queues * 6 states = 18 samples for the count metric.
+        assert len(count_metric.samples) == 3 * 6
+
+        # Build a lookup keyed by (queue, state).
+        count_samples = {
+            (s.labels["queue"], s.labels["state"]): s.value
+            for s in count_metric.samples
+        }
+
+        # Known-value assertions from the fixture.
+        assert count_samples[("metadataExtraction", "active")] == 2
+        assert count_samples[("metadataExtraction", "waiting")] == 5
+        assert count_samples[("metadataExtraction", "completed")] == 100
+        assert count_samples[("metadataExtraction", "failed")] == 1
+        assert count_samples[("metadataExtraction", "delayed")] == 3
+        assert count_samples[("metadataExtraction", "paused")] == 0
+
+        assert count_samples[("smartSearch", "failed")] == 7
+        assert count_samples[("smartSearch", "active")] == 0
+
+        # Missing 'waiting' key must yield a 0 sample, not absence.
+        assert ("thumbnailGeneration", "waiting") in count_samples
+        assert count_samples[("thumbnailGeneration", "waiting")] == 0
+
+        # isActive / isPaused as 0/1 gauges.
+        active_samples = {s.labels["queue"]: s.value for s in active_metric.samples}
+        paused_samples = {s.labels["queue"]: s.value for s in paused_metric.samples}
+
+        assert active_samples["metadataExtraction"] == 1
+        assert paused_samples["metadataExtraction"] == 0
+        assert active_samples["smartSearch"] == 0
+        assert paused_samples["smartSearch"] == 1
+        assert active_samples["thumbnailGeneration"] == 1
+        assert paused_samples["thumbnailGeneration"] == 0
+
+    @responses.activate
+    def test_collect_job_metrics_error_handling(self):
+        """Test that job collection errors don't break other collectors"""
+        # Jobs endpoint fails.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/jobs",
+            json={"error": "Server error"},
+            status=500,
+        )
+
+        # Other collectors must still work: mock them with minimal payloads.
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/admin/users",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/albums/statistics",
+            json={"owned": 0, "shared": 0, "notShared": 0},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/libraries",
+            json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "http://localhost:2283/api/server/storage",
+            json={
+                "diskSizeRaw": 0,
+                "diskUseRaw": 0,
+                "diskAvailableRaw": 0,
+                "diskUsagePercentage": 0,
+            },
+            status=200,
+        )
+
+        # _collect_job_metrics itself must not raise.
+        job_metrics = list(self.collector._collect_job_metrics())
+        # On failure the family generator returns before yielding anything.
+        assert job_metrics == []
+
+        # A full collect() run must still produce the timestamp metric and not
+        # surface the failure as an exception.
+        metrics = list(self.collector.collect())
+        assert len(metrics) >= 1
+        assert metrics[0].name == "immich_exporter_last_scrape_timestamp_ms"
+        # No job metric families should be present in the aggregated output.
+        job_metric_names = [
+            m.name for m in metrics if m.name.startswith("immich_job_queue_")
+        ]
+        assert job_metric_names == []
 
 
 class TestCLICommands:
