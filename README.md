@@ -46,6 +46,10 @@ This exporter collects and exports the following metrics:
 - <https://github.com/KryptionX/immich-prometheus-exporter> - based on this project
 - <https://github.com/victorarias/immich-prometheus-exporter> - also includes job statistics
 
+## Compatibility
+
+Tested against Immich server v3.1.0. All previously used API endpoints (/admin/users, /admin/users/{id}/statistics, /albums/statistics, /libraries, /libraries/{id}/statistics, /server/storage) are unchanged between v1.137.3 and v3.1.0. For older Immich v1.x / v2.x compatibility, use exporter versions prior to this release.
+
 ## Requirements
 
 - Python 3.7+
