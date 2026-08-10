@@ -8,35 +8,105 @@ A Python script that exports Immich statistics as Prometheus metrics using the I
 
 ![Screenshot of a grafana dashboard for the exported data](grafana/screenshot.png)
 
+## Breaking Changes
+
+The server-stats and health-metrics refactor introduces the following
+breaking changes vs. the previous release:
+
+- **Removed**: `immich_user_total_assets`, `immich_user_images_count`,
+  `immich_user_videos_count`. Use `immich_user_photos` + `immich_user_videos`
+  (or their sum for the old "total").
+- **Removed label**: `user_email` is no longer emitted on any
+  `immich_user_*` metric. Use `user_id` / `user_name` for aggregation.
+- The N+1 `/admin/users/{id}/statistics` scraping loop has been replaced by
+  a single `/server/statistics` call.
+
 ## Features
 
 This exporter collects and exports the following metrics:
 
 ### User Metrics
-- `immich_user_total_assets` - Total number of assets per user
-- `immich_user_images_count` - Number of images per user  
-- `immich_user_videos_count` - Number of videos per user
+
+- `immich_user_photos` - Number of photo assets owned by user
+- `immich_user_videos` - Number of video assets owned by user
+- `immich_user_usage_bytes` - Total storage used by user, in bytes
+- `immich_user_usage_photos_bytes` - Storage used by user's photo assets, in bytes
+- `immich_user_usage_videos_bytes` - Storage used by user's video assets, in bytes
 - `immich_user_quota_bytes` - User quota in bytes (if configured)
 - `immich_user_quota_usage_bytes` - User quota usage in bytes (if configured)
+- `immich_user_admin` - 1 if the user has admin privileges, else 0
+- `immich_user_status{status}` - User account status (stateset: emitted once
+  per user with the current status as a label)
+- `immich_user_deleted` - 1 if the user has a non-null `deletedAt` timestamp,
+  else 0
+
+> The `user_email` label has been removed from every `immich_user_*` metric;
+> use `user_id` / `user_name` for aggregation.
+
+### Server Statistics
+
+- `immich_server_photos` - Total photo assets across the Immich instance
+- `immich_server_videos` - Total video assets across the Immich instance
+- `immich_server_usage_bytes` - Total storage used by assets across the instance, in bytes
+- `immich_server_usage_photos_bytes` - Storage used by photos across the instance, in bytes
+- `immich_server_usage_videos_bytes` - Storage used by videos across the instance, in bytes
+
+### Health & Maintenance
+
+- `immich_up` - 1 if the Immich API responded to `/server/ping` successfully, else 0
+- `immich_maintenance_active{action,task}` - 1 if an Immich maintenance action
+  is currently in progress, else 0
+- `immich_maintenance_progress{action,task}` - Progress of the current Immich
+  maintenance action, 0–100
 
 ### Album Metrics
+
 - `immich_albums_owned_total` - Total number of albums owned by users
 - `immich_albums_shared_total` - Total number of shared albums
 - `immich_albums_not_shared_total` - Total number of albums not shared
 
 ### Library Metrics
+
 - `immich_library_total_assets` - Total number of assets per library
 - `immich_library_photos_count` - Number of photos per library
 - `immich_library_videos_count` - Number of videos per library
 - `immich_library_usage_bytes` - Library usage in bytes
 
 ### Storage Metrics
+
 - `immich_storage_disk_size_bytes` - Total disk size in bytes
 - `immich_storage_disk_use_bytes` - Used disk space in bytes
 - `immich_storage_disk_available_bytes` - Available disk space in bytes
 - `immich_storage_disk_usage_percentage` - Disk usage percentage
 
+### Job Metrics
+
+- `immich_job_queue_count{queue,state}` - Job counts per Immich queue and state
+  (state ∈ {active, waiting, completed, failed, delayed, paused})
+- `immich_job_queue_active{queue}` - 1 if the queue is active, else 0
+- `immich_job_queue_paused{queue}` - 1 if the queue is paused, else 0
+
+Example PromQL:
+
+```promql
+# Total failed jobs across all queues
+sum(immich_job_queue_count{state="failed"})
+
+# Queues currently backlogged (waiting > 0)
+immich_job_queue_count{state="waiting"} > 0
+
+# Free capacity ratio
+1 - (immich_storage_disk_use_bytes / immich_storage_disk_size_bytes)
+
+# Storage by user, top 10
+topk(10, immich_user_usage_bytes)
+
+# Alert: Immich unreachable for 5 minutes
+avg_over_time(immich_up[5m]) < 1
+```
+
 ### System Metrics
+
 - `immich_exporter_last_scrape_timestamp_ms` - Timestamp of last successful scrape
 
 ## Alternative projects
@@ -45,6 +115,12 @@ This exporter collects and exports the following metrics:
 - <https://github.com/patte/immich_stats_exporter>
 - <https://github.com/KryptionX/immich-prometheus-exporter> - based on this project
 - <https://github.com/victorarias/immich-prometheus-exporter> - also includes job statistics
+
+## Compatibility
+
+Tested against Immich server v3.1.0. All previously used API endpoints (/admin/users, /admin/users/{id}/statistics, /albums/statistics, /libraries, /libraries/{id}/statistics, /server/storage) are unchanged between v1.137.3 and v3.1.0. For older Immich v1.x / v2.x compatibility, use exporter versions prior to this release.
+
+The `/api/jobs` endpoint used for job metrics is present in both v1.137.3 and v3.1.0 with an identical response shape (in v3.1.0 the operationId was renamed to `getQueuesLegacy`, but the payload is unchanged). It requires an admin API key.
 
 ## Requirements
 
@@ -59,11 +135,13 @@ This exporter collects and exports the following metrics:
 
 1. Clone or download this repository
 2. Install the package:
+
    ```bash
    pip install .
    ```
-   
+
    Or for development:
+
    ```bash
    pip install -e .
    ```
@@ -72,6 +150,7 @@ This exporter collects and exports the following metrics:
 
 1. Clone or download this repository
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -81,16 +160,19 @@ This exporter collects and exports the following metrics:
 ### Basic Export (one-time)
 
 **If installed as a package:**
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
 
 **If running directly:**
+
 ```bash
 python3 immich-prometheus-exporter.py export --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
 
 Export metrics to a file:
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY --output metrics.txt
 ```
@@ -98,6 +180,7 @@ immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API
 ### Continuous Export
 
 Export metrics every 60 seconds:
+
 ```bash
 immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API_KEY --interval 60
 ```
@@ -105,6 +188,7 @@ immich-prometheus-exporter export --url http://localhost:2283 --api-key YOUR_API
 ### Test Connection
 
 Test your connection and API key:
+
 ```bash
 immich-prometheus-exporter test-connection --url http://localhost:2283 --api-key YOUR_API_KEY
 ```
@@ -119,11 +203,13 @@ immich-prometheus-exporter test-connection --url http://localhost:2283 --api-key
 ### Help
 
 Get help for all commands:
+
 ```bash
 immich-prometheus-exporter --help
 ```
 
 Get help for a specific command:
+
 ```bash
 immich-prometheus-exporter export --help
 ```
@@ -198,10 +284,12 @@ docker-compose up
 The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. Each command has its own set of environment variables:
 
 #### Global Options
+
 - `IMMICHEXPORTER_INSTALL_COMPLETION` - Install completion for the current shell
 - `IMMICHEXPORTER_SHOW_COMPLETION` - Show completion for the current shell
 
 #### Export Command
+
 - `IMMICHEXPORTER_EXPORT_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_EXPORT_API_KEY` - Immich API key (required)
 - `IMMICHEXPORTER_EXPORT_OUTPUT` - Output file path (optional)
@@ -211,6 +299,7 @@ The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. E
 - `IMMICHEXPORTER_EXPORT_LOG_TO_STDOUT` - Log to stdout instead of stderr (optional)
 
 #### Serve Command
+
 - `IMMICHEXPORTER_SERVE_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_SERVE_API_KEY` - Immich API key (required)
 - `IMMICHEXPORTER_SERVE_PORT` - Port to serve metrics on (default: 8000)
@@ -218,6 +307,7 @@ The exporter supports environment variables with the prefix `IMMICHEXPORTER_`. E
 - `IMMICHEXPORTER_SERVE_LOG_FILE` - Log file path (optional)
 
 #### Test Connection Command
+
 - `IMMICHEXPORTER_TEST_CONNECTION_URL` - Immich server URL (required)
 - `IMMICHEXPORTER_TEST_CONNECTION_API_KEY` - Immich API key (required)
 
@@ -268,15 +358,18 @@ immich_storage_disk_size_bytes 1000000000000
 ## Troubleshooting
 
 ### Connection Issues
+
 - Verify your Immich server URL is correct and accessible
 - Check that your API key is valid and has admin privileges
 - Ensure Immich server is running and responding
 
 ### Permission Issues
+
 - Make sure your API key has admin privileges
 - Some endpoints require specific permissions - check Immich logs for details
 
 ### Missing Metrics
+
 - If user quotas are not configured, quota metrics won't appear
 - Libraries are only available if you have external libraries configured
 - Some metrics may be 0 if no data exists
@@ -284,6 +377,7 @@ immich_storage_disk_size_bytes 1000000000000
 ## Development
 
 The script is built using:
+
 - **typer** for CLI interface
 - **requests** for HTTP requests (reliable and user-friendly HTTP library)
 - **json** for API response parsing
